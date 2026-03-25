@@ -158,11 +158,16 @@ async function getDay(date) {
 }
 
 async function upsertDay(day) {
+  // Always fetch uid fresh from auth to avoid stale currentUid issues
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id || currentUid
+  if (!uid) { showToast('Not authenticated', 'error'); return false }
+
   // 1. Delete existing session rows for this date
-  await supabase.from('sessions').delete().eq('user_id', currentUid).eq('date', day.date)
+  await supabase.from('sessions').delete().eq('user_id', uid).eq('date', day.date)
 
   // 2. Insert new session rows
-  const rows = localFormatToDbRows(day, currentUid)
+  const rows = localFormatToDbRows(day, uid)
   if (rows.length > 0) {
     const { data: inserted, error: sesErr } = await supabase.from('sessions').insert(rows).select()
     if (sesErr) { showToast('Error saving sessions: ' + sesErr.message, 'error'); return false }
@@ -175,7 +180,7 @@ async function upsertDay(day) {
         if (!sessionId) continue
         const exRows = s.exercises.map(ex => ({
           session_id: sessionId,
-          user_id: currentUid,
+          user_id: uid,
           name: ex.name || 'Exercise',
           sets: ex.sets ? parseInt(ex.sets) : null,
           reps: ex.reps ? parseInt(ex.reps) : null,
@@ -189,7 +194,7 @@ async function upsertDay(day) {
   // 4. Upsert sleep log if present
   if (day.sleep && (day.sleep.hours != null || day.sleep.bedtime)) {
     const sleepRow = {
-      user_id: currentUid,
+      user_id: uid,
       date: day.date,
       bedtime: day.sleep.bedtime || null,
       wake_time: day.sleep.wakeTime || null,
