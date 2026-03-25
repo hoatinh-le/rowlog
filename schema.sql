@@ -166,6 +166,34 @@ $$;
 grant execute on function get_profile_by_share_token(uuid) to anon, authenticated;
 
 -- ─────────────────────────────────────────────
+-- AUTO-CREATE PROFILE ON SIGNUP
+-- Runs as SECURITY DEFINER so it bypasses RLS.
+-- Username/name/club are passed as user metadata during signUp.
+-- ─────────────────────────────────────────────
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, username, full_name, club)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'full_name',
+    new.raw_user_meta_data->>'club'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+create or replace trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- ─────────────────────────────────────────────
 -- ROW LEVEL SECURITY
 -- ─────────────────────────────────────────────
 alter table profiles enable row level security;
@@ -191,10 +219,11 @@ create policy "Users can update own profile"
 create policy "Users can delete own profile"
   on profiles for delete using (auth.uid() = id);
 
--- Public profiles readable by any authenticated user
-create policy "Public profiles readable by authenticated users"
+-- Any authenticated user can read any profile (needed for search/follow to work).
+-- is_public controls visibility of training data, not profile discoverability.
+create policy "Authenticated users can search all profiles"
   on profiles for select
-  using (is_public = true and auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated');
 
 -- ── sessions ──────────────────────────────────
 create policy "Users can CRUD own sessions"

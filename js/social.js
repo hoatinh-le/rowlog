@@ -10,8 +10,7 @@ export async function searchUsers(query) {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, username, full_name, club, avatar_url')
-      .eq('is_public', true)
+      .select('id, username, full_name, club, avatar_url, is_public')
       .or(`username.ilike.%${query}%,club.ilike.%${query}%`)
       .limit(20)
     if(error) throw error

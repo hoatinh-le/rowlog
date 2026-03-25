@@ -98,21 +98,25 @@ function dbRowsToLocalFormat(sessionRows, sleepRows) {
 
 // Flatten a day's sessions array to DB rows
 function localFormatToDbRows(day, userId) {
-  return day.sessions.map((s, i) => ({
-    id: s.id || undefined,
-    user_id: userId,
-    date: day.date,
-    session_number: i + 1,
-    type: s.type,
-    piece_type: s.pieceType || null,
-    distance_km: s.distance ? parseFloat(s.distance) : null,
-    split_text: s.split || null,
-    split_secs: parseSplit(s.split) || s.splitSecs || null,
-    stroke_rate: s.rate ? parseInt(s.rate) : null,
-    rpe: s.rpe ? parseInt(s.rpe) : null,
-    notes: s.notes || null,
-    tss: null
-  }))
+  return day.sessions.map((s, i) => {
+    const row = {
+        date: day.date,
+      session_number: i + 1,
+      type: s.type,
+      piece_type: s.pieceType || null,
+      distance_km: s.distance ? parseFloat(s.distance) : null,
+      split_text: s.split || null,
+      split_secs: parseSplit(s.split) || s.splitSecs || null,
+      stroke_rate: s.rate ? parseInt(s.rate) : null,
+      rpe: s.rpe ? parseInt(s.rpe) : null,
+      notes: s.notes || null,
+      tss: null
+    }
+    // Only include id if it already exists (existing DB row) — omitting it
+    // lets Postgres auto-generate a UUID via gen_random_uuid()
+    if (s.id) row.id = s.id
+    return row
+  })
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1962,31 +1966,58 @@ window.renderCheckin = renderCheckin
 // ═══════════════════════════════════════════════════════
 // SIDEBAR SEARCH (delegates to social.js)
 // ═══════════════════════════════════════════════════════
-window.handleSearch = async function(query) {
-  const resultsEl = document.getElementById('search-results')
-  if(!resultsEl) return
-  if(!query || query.length < 2) { resultsEl.style.display='none'; return }
+let _searchDebounce = null
+window.handleSearch = function(query) {
+  // Guard: module may not be ready yet on first keypress
+  clearTimeout(_searchDebounce)
+  _searchDebounce = setTimeout(async () => {
+    const resultsEl = document.getElementById('search-results')
+    if(!resultsEl) return
+    if(!query || query.length < 2) { resultsEl.style.display='none'; return }
 
-  const { searchUsers } = await import('./social.js')
-  const users = await searchUsers(query)
-  if(!users.length) { resultsEl.style.display='none'; return }
+    const { searchUsers } = await import('./social.js')
+    const users = await searchUsers(query)
 
-  resultsEl.style.display = 'block'
-  resultsEl.innerHTML = users.map(u => `
-    <div class="search-result-item" onclick="window._viewProfile('${u.id}')">
-      <div style="width:28px;height:28px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">${(u.username||'?')[0].toUpperCase()}</div>
-      <div>
-        <div style="font-weight:500;color:var(--text)">${u.username}</div>
-        <div style="font-size:10px;color:var(--text2)">${u.club||''}</div>
+    if(!users.length) {
+      resultsEl.style.display = 'block'
+      resultsEl.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--text3)">No athletes found.</div>'
+      return
+    }
+
+    resultsEl.style.display = 'block'
+    resultsEl.innerHTML = users.map(u => `
+      <div class="search-result-item" data-uid="${u.id}">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">
+          ${u.avatar_url ? `<img src="${u.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : (u.username||'?')[0].toUpperCase()}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;color:var(--text)">${u.username}${u.is_public ? '' : ' <span style="font-size:9px;color:var(--text3)">(private)</span>'}</div>
+          <div style="font-size:10px;color:var(--text2)">${u.club||''}</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="window._sendFollow('${u.id}','${u.username}',this);event.stopPropagation()">Follow</button>
       </div>
-    </div>
-  `).join('')
+    `).join('')
+
+    // Close on outside click
+    setTimeout(() => {
+      const close = (e) => {
+        if(!resultsEl.contains(e.target) && e.target.id !== 'sidebar-search') {
+          resultsEl.style.display = 'none'
+          document.removeEventListener('click', close)
+        }
+      }
+      document.addEventListener('click', close)
+    }, 0)
+  }, 300)
 }
 
-window._viewProfile = function(userId) {
-  const resultsEl = document.getElementById('search-results')
-  if(resultsEl) resultsEl.style.display='none'
-  import('./social.js').then(m => m.sendConnectionRequest(userId))
+window._sendFollow = async function(userId, username, btn) {
+  btn.disabled = true
+  btn.textContent = '...'
+  const { sendConnectionRequest } = await import('./social.js')
+  await sendConnectionRequest(userId)
+  btn.textContent = 'Sent'
+  btn.style.opacity = '0.5'
 }
 
 // ═══════════════════════════════════════════════════════
