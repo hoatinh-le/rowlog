@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(open:*)",
+      "Bash(osascript -e 'tell application \"\"Safari\"\" to do JavaScript \"\"localStorage.removeItem\\(\\\\\"\"rowlog_sessions\\\\\"\"\\); localStorage.removeItem\\(\\\\\"\"rowlog_races\\\\\"\"\\); location.reload\\(\\);\"\" in current tab of window 1')",
+      "Bash(wc:*)"
+    ]
+  }
+}

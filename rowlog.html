@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RowLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  /* Claude-inspired warm cream palette */
+  --bg:     #F5F0E8;
+  --bg2:    #EDE6DA;
+  --bg3:    #FDFAF6;
+  --bg4:    #F0EBE1;
+  --border: #DDD4C4;
+  --border2:#C8BAA8;
+  --accent: #C96340;
+  --accent2:rgba(201,99,64,0.10);
+  --accent3:rgba(201,99,64,0.06);
+  --text:   #2C1F14;
+  --text2:  #8C7660;
+  --text3:  #C0AE9A;
+  --bright: #1A0E06;
+  --red:    #B83232;
+  --red2:   rgba(184,50,50,0.10);
+  --green:  #2E7A4A;
+  --green2: rgba(46,122,74,0.10);
+  --amber:  #A86020;
+  --amber2: rgba(168,96,32,0.10);
+  --cyan:   #2A6E8A;
+  --purple: #6040A0;
+  --mono: 'IBM Plex Mono', monospace;
+  --head: 'Syne', sans-serif;
+  --r: 7px;
+  --shadow: 0 1px 3px rgba(44,31,20,0.07), 0 1px 2px rgba(44,31,20,0.04);
+  --shadow-md: 0 4px 12px rgba(44,31,20,0.08), 0 2px 4px rgba(44,31,20,0.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  height:100%;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:13px;
+  line-height:1.5;
+  overflow:hidden;
+}
+/* Subtle warm grain on body */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events:none;
+  z-index:0;
+  opacity:0.6;
+}
+#app{position:relative;z-index:1}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* LAYOUT */
+#app{display:flex;height:100vh}
+#sidebar{
+  width:216px;min-width:216px;
+  background:var(--bg2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.sidebar-logo{
+  padding:22px 20px 18px;
+  border-bottom:1px solid var(--border);
+  position:relative;
+}
+.sidebar-logo::after{
+  content:'';
+  position:absolute;bottom:0;left:20px;right:20px;
+  height:2px;
+  background:linear-gradient(90deg,var(--accent),transparent);
+  border-radius:1px;
+}
+.sidebar-logo h1{
+  font-family:var(--head);
+  font-size:21px;font-weight:800;
+  color:var(--bright);
+  letter-spacing:-0.8px;
+}
+.sidebar-logo span{color:var(--accent)}
+.sidebar-subtitle{
+  font-size:9px;color:var(--text2);
+  margin-top:3px;letter-spacing:1.2px;text-transform:uppercase;
+}
+nav{flex:1;padding:10px 0;overflow-y:auto}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 20px;
+  color:var(--text2);
+  cursor:pointer;
+  transition:all 0.18s;
+  font-size:12px;font-family:var(--mono);letter-spacing:0.2px;
+  border-left:2px solid transparent;
+  text-decoration:none;
+}
+.nav-item:hover{color:var(--text);background:var(--accent3)}
+.nav-item.active{
+  color:var(--accent);
+  background:var(--accent2);
+  border-left-color:var(--accent);
+  font-weight:500;
+}
+.nav-item svg{flex-shrink:0;opacity:0.7;transition:opacity 0.18s}
+.nav-item:hover svg,.nav-item.active svg{opacity:1}
+#main{flex:1;overflow-y:auto;overflow-x:hidden;background:var(--bg)}
+.page{display:none;padding:28px 36px;min-height:100%}
+.page.active{display:block}
+
+/* TYPOGRAPHY */
+h2{
+  font-family:var(--head);font-size:24px;font-weight:800;
+  color:var(--bright);margin-bottom:20px;letter-spacing:-0.8px;
+}
+h3{
+  font-family:var(--head);font-size:14px;font-weight:700;
+  color:var(--bright);margin-bottom:12px;letter-spacing:-0.2px;
+}
+h4{font-family:var(--head);font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px}
+
+/* CARDS */
+.card{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:20px;
+  box-shadow:var(--shadow);
+}
+.card-sm{padding:14px 16px}
+.card+.card{margin-top:16px}
+.grid{display:grid;gap:16px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:1fr 1fr 1fr}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+
+/* STAT BAR */
+.stat-bar{
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:16px 24px;
+  display:flex;gap:0;
+  margin-bottom:20px;
+  overflow-x:auto;
+  box-shadow:var(--shadow);
+}
+.stat-item{flex:1;min-width:120px;padding:0 24px;border-right:1px solid var(--border);text-align:center}
+.stat-item:first-child{padding-left:0}
+.stat-item:last-child{border-right:none;padding-right:0}
+.stat-val{
+  font-family:var(--mono);font-size:24px;font-weight:600;
+  color:var(--bright);line-height:1.1;
+  letter-spacing:-0.5px;
+}
+.stat-label{font-size:9.5px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.stat-sub{font-size:11px;color:var(--accent);margin-top:2px;font-weight:500}
+
+/* CHIPS */
+.chip{display:inline-flex;align-items:center;padding:2px 9px;border-radius:12px;font-size:10.5px;font-weight:500;white-space:nowrap;font-family:var(--mono);letter-spacing:0.1px}
+.chip-race     {background:rgba(184,50,50,0.10);     color:#8C1C1C; border:1px solid rgba(184,50,50,0.22)}
+.chip-water    {background:rgba(42,110,160,0.10);    color:#1A4E7A; border:1px solid rgba(42,110,160,0.22)}
+.chip-pieces   {background:rgba(26,120,138,0.10);    color:#0D556A; border:1px solid rgba(26,120,138,0.22)}
+.chip-ut2      {background:rgba(46,122,74,0.10);     color:#1A5830; border:1px solid rgba(46,122,74,0.22)}
+.chip-threshold{background:rgba(168,96,32,0.10);     color:#7A4010; border:1px solid rgba(168,96,32,0.22)}
+.chip-intervals{background:rgba(201,99,64,0.12);     color:#8A3018; border:1px solid rgba(201,99,64,0.25)}
+.chip-sc       {background:rgba(96,64,160,0.10);     color:#40207A; border:1px solid rgba(96,64,160,0.22)}
+.chip-rest     {background:rgba(140,118,96,0.10);    color:#5A4A3A; border:1px solid rgba(140,118,96,0.20)}
+.chip-other    {background:rgba(100,120,140,0.10);   color:#405060; border:1px solid rgba(100,120,140,0.20)}
+.chip-pb       {background:rgba(168,96,32,0.12);     color:#7A4010; border:1px solid rgba(168,96,32,0.28)}
+
+/* FORMS */
+.form-group{margin-bottom:14px}
+label{display:block;font-size:10.5px;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:5px}
+input,select,textarea{
+  width:100%;
+  background:var(--bg4);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  color:var(--text);
+  font-family:var(--mono);font-size:13px;
+  padding:8px 10px;outline:none;
+  transition:border-color 0.15s, box-shadow 0.15s;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(201,99,64,0.10);
+}
+select option{background:var(--bg3);color:var(--text)}
+textarea{resize:vertical;min-height:60px}
+input[type=date]::-webkit-calendar-picker-indicator{opacity:0.5;cursor:pointer}
+.form-row{display:grid;gap:12px}
+.form-row-2{grid-template-columns:1fr 1fr}
+.form-row-3{grid-template-columns:1fr 1fr 1fr}
+.form-row-4{grid-template-columns:1fr 1fr 1fr 1fr}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--r);border:none;cursor:pointer;font-family:var(--mono);font-size:12px;font-weight:500;transition:all 0.15s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#FDFAF6;box-shadow:0 1px 3px rgba(201,99,64,0.3)}
+.btn-primary:hover{background:#B05030;box-shadow:0 2px 6px rgba(201,99,64,0.4);transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--border2);background:var(--bg4)}
+.btn-danger{background:var(--red2);color:var(--red);border:1px solid rgba(184,50,50,0.22)}
+.btn-danger:hover{background:rgba(184,50,50,0.18)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-icon{padding:6px;background:transparent;border:none;color:var(--text2);cursor:pointer;border-radius:4px;transition:all 0.15s;display:inline-flex}
+.btn-icon:hover{color:var(--red);background:var(--red2)}
+
+/* TABLES */
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:0.9px;color:var(--text2);padding:8px 12px;border-bottom:1px solid var(--border);text-align:left;font-weight:500}
+td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--accent3)}
+.tbl-mono{font-family:var(--mono)}
+
+/* CHARTS */
+.chart-wrap{position:relative;width:100%}
+.chart-wrap canvas{display:block;width:100%!important}
+.chart-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2)}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* CALENDAR */
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-day-label{text-align:center;font-size:9.5px;color:var(--text2);padding:4px 0;text-transform:uppercase;letter-spacing:0.6px}
+.cal-day{
+  aspect-ratio:1;border-radius:5px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all 0.15s;
+  border:1px solid transparent;
+  position:relative;min-height:44px;font-size:11px;
+}
+.cal-day:hover{border-color:var(--accent) !important;box-shadow:0 0 0 2px var(--accent2)}
+.cal-day.empty{cursor:default;pointer-events:none}
+.cal-day.today{border-color:var(--accent) !important;box-shadow:0 0 0 2px var(--accent2)}
+.cal-day-num{font-size:11px;font-weight:500;line-height:1}
+.cal-day-dots{display:flex;gap:2px;margin-top:3px;flex-wrap:wrap;justify-content:center;max-width:28px}
+.cal-dot{width:4px;height:4px;border-radius:50%}
+.cal-month-nav{display:flex;align-items:center;gap:8px}
+
+/* PB BOARD */
+.pb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.pb-card{
+  background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--r);padding:14px 16px;
+  transition:box-shadow 0.15s;
+}
+.pb-card:hover{box-shadow:var(--shadow-md)}
+.pb-card.has-pb{border-color:rgba(168,96,32,0.30);background:rgba(168,96,32,0.04)}
+.pb-type{font-size:9.5px;color:var(--text2);text-transform:uppercase;letter-spacing:0.9px;margin-bottom:5px}
+.pb-val{font-size:22px;font-weight:600;color:var(--bright);line-height:1;letter-spacing:-0.5px}
+.pb-date{font-size:10px;color:var(--text2);margin-top:4px}
+.pb-prev{font-size:10px;color:var(--green);margin-top:2px;font-weight:500}
+
+/* SESSION LOG BLOCKS */
+.session-block{
+  background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--r);padding:16px;margin-bottom:12px;
+  position:relative;box-shadow:var(--shadow);
+}
+.session-block-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.session-num{
+  font-family:var(--head);font-size:11px;font-weight:700;
+  color:var(--accent);text-transform:uppercase;letter-spacing:0.8px;
+}
+.exercise-row{display:grid;grid-template-columns:1fr 80px 60px 60px 24px;gap:8px;align-items:center;margin-bottom:6px}
+.exercise-row input{margin:0}
+
+/* MISC */
+.divider{height:1px;background:var(--border);margin:16px 0}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text2)}
+.empty-state svg{margin:0 auto 12px;display:block;opacity:0.2}
+.empty-state p{font-size:13px}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.page-header h2{margin-bottom:0}
+.badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(168,96,32,0.12);color:var(--amber);margin-left:6px;border:1px solid rgba(168,96,32,0.22)}
+.text-accent{color:var(--accent)}
+.text-green{color:var(--green)}
+.text-red{color:var(--red)}
+.text-amber{color:var(--amber)}
+.text-muted{color:var(--text2)}
+.mt-4{margin-top:4px}
+.mt-8{margin-top:8px}
+.mt-12{margin-top:12px}
+.mt-16{margin-top:16px}
+.mt-20{margin-top:20px}
+.flex{display:flex}
+.flex-center{display:flex;align-items:center}
+.flex-between{display:flex;align-items:center;justify-content:space-between}
+.gap-8{gap:8px}
+.gap-12{gap:12px}
+.gap-16{gap:16px}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filter-btn{
+  padding:4px 12px;border-radius:14px;font-size:11px;
+  cursor:pointer;border:1px solid var(--border);
+  background:transparent;color:var(--text2);
+  font-family:var(--mono);transition:all 0.15s;
+}
+.filter-btn.active{background:var(--accent2);border-color:var(--accent);color:var(--accent);font-weight:500}
+.filter-btn:hover{color:var(--text);border-color:var(--border2);background:var(--bg4)}
+.race-card{
+  background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--r);padding:16px 18px;margin-bottom:10px;
+  box-shadow:var(--shadow);
+}
+.race-card.upcoming{border-left:3px solid var(--accent)}
+.race-card.past{border-left:3px solid var(--border2)}
+.tsb-pos{color:var(--green)}
+.tsb-neg{color:var(--red)}
+.inline-form{
+  background:var(--bg4);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px;margin-bottom:16px;
+  box-shadow:var(--shadow);
+}
+
+/* GUIDE PAGE */
+.guide-section{margin-bottom:32px}
+.guide-section:last-child{margin-bottom:0}
+.guide-lead{font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:20px;max-width:680px}
+.guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.guide-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.guide-card{background:var(--bg4);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px}
+.guide-card-accent{background:rgba(201,99,64,0.05);border-color:rgba(201,99,64,0.2)}
+.guide-label{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:6px;font-weight:500}
+.guide-title{font-family:var(--head);font-size:15px;font-weight:700;color:var(--bright);margin-bottom:6px}
+.guide-body{font-size:12px;color:var(--text2);line-height:1.65}
+.guide-body p{margin-bottom:8px}
+.guide-body p:last-child{margin-bottom:0}
+.guide-formula{font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:10px 14px;color:var(--text);margin:10px 0;line-height:1.8}
+.guide-formula span{color:var(--accent);font-weight:600}
+.guide-tsb-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.guide-tsb-table td{padding:7px 12px;border-bottom:1px solid var(--border)}
+.guide-tsb-table tr:last-child td{border-bottom:none}
+.guide-tsb-table td:first-child{font-family:var(--mono);font-weight:600;white-space:nowrap}
+.guide-rpe-row{display:flex;gap:4px;margin:10px 0}
+.guide-rpe-cell{flex:1;border-radius:4px;padding:8px 4px;text-align:center;font-size:10px;font-weight:600;font-family:var(--mono);line-height:1.3}
+.guide-chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.guide-divider{height:1px;background:var(--border);margin:28px 0}
+.guide-nav-hint{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text2);background:var(--bg4);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:8px}
+.guide-nav-hint svg{flex-shrink:0;color:var(--accent)}
+.guide-step{display:flex;gap:14px;margin-bottom:14px;align-items:flex-start}
+.guide-step-num{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.guide-step-body{flex:1}
+.guide-step-body strong{display:block;font-size:13px;color:var(--bright);margin-bottom:3px;font-family:var(--head);font-weight:600}
+.guide-step-body span{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* CHECK-IN / READINESS / SLEEP */
+.checkin-banner{display:flex;align-items:center;justify-content:space-between;background:rgba(168,96,32,0.07);border:1px solid rgba(168,96,32,0.22);border-radius:var(--r);padding:10px 16px;margin-bottom:16px}
+.checkin-banner-left{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--amber);font-weight:500}
+.checkin-banner-right{display:flex;align-items:center;gap:6px}
+.traffic-light{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;font-family:var(--mono)}
+.traffic-green{background:rgba(46,122,74,0.10);color:var(--green);border:1px solid rgba(46,122,74,0.25)}
+.traffic-amber{background:rgba(168,96,32,0.10);color:var(--amber);border:1px solid rgba(168,96,32,0.22)}
+.traffic-red{background:rgba(184,50,50,0.10);color:var(--red);border:1px solid rgba(184,50,50,0.22)}
+.readiness-ring{width:120px;height:120px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.readiness-ring svg{position:absolute;top:0;left:0;transform:rotate(-90deg)}
+.readiness-ring-inner{text-align:center;position:relative;z-index:1}
+.readiness-ring-num{font-family:var(--mono);font-size:28px;font-weight:600;color:var(--bright);line-height:1;letter-spacing:-1px}
+.readiness-ring-lbl{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;margin-top:2px}
+.slider-row{margin-bottom:14px}
+.slider-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.slider-label .sl-name{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px}
+.slider-label .sl-val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--text);min-width:20px;text-align:right}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border2);outline:none;border:none!important;padding:0!important;cursor:pointer;box-shadow:none!important;transition:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--bg3);box-shadow:0 1px 3px rgba(44,31,20,0.15);cursor:pointer;transition:transform 0.15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
+input[type=range]:focus{border:none!important;box-shadow:none!important;outline:none!important}
+.sleep-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.sleep-stat{background:var(--bg4);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow)}
+.sleep-stat-val{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--bright);line-height:1;letter-spacing:-0.5px}
+.sleep-stat-label{font-size:9.5px;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;margin-top:3px}
+.sleep-stat-sub{font-size:10px;color:var(--text3);margin-top:2px}
+.corr-insight{background:var(--bg4);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-top:12px;font-size:12px;display:flex;align-items:flex-start;gap:10px;line-height:1.6}
+.corr-insight svg{flex-shrink:0;color:var(--cyan);margin-top:1px}
+.summary-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px 20px;margin-bottom:16px;box-shadow:var(--shadow);display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.summary-rec{flex:1;min-width:180px}
+.summary-rec strong{display:block;font-size:9.5px;color:var(--text2);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px}
+.summary-rec p{font-size:13px;color:var(--text);line-height:1.4}
+.summary-metrics{display:flex;gap:20px;flex-wrap:wrap}
+.summary-metric{text-align:center;min-width:56px}
+.summary-metric-val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--bright);line-height:1}
+.summary-metric-label{font-size:9.5px;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-top:3px}
+.ci-prev-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
+.ci-breakdown-grid{display:grid;grid-template-columns:1fr auto auto;gap:5px 14px;align-items:center;font-size:12px}
+.ci-breakdown-grid span:nth-child(3n+2){color:var(--text);font-weight:500}
+.ci-breakdown-grid span:nth-child(3n+3){color:var(--accent);font-weight:600;text-align:right}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-logo">
+      <h1>Row<span>Log</span></h1>
+      <div class="sidebar-subtitle">Training Logger</div>
+    </div>
+    <nav>
+      <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-item" data-page="log" onclick="navigate('log');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Log
+      </a>
+      <a class="nav-item" data-page="checkin" onclick="navigate('checkin');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        Check-in
+      </a>
+      <a class="nav-item" data-page="ergs" onclick="navigate('ergs');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Ergs
+      </a>
+      <a class="nav-item" data-page="calendar" onclick="navigate('calendar');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Calendar
+      </a>
+      <a class="nav-item" data-page="races" onclick="navigate('races');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        Races
+      </a>
+      <a class="nav-item" data-page="records" onclick="navigate('records');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        Records
+      </a>
+      <a class="nav-item" data-page="guide" onclick="navigate('guide');return false" href="#" style="margin-top:auto;border-top:1px solid var(--border)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Guide
+      </a>
+    </nav>
+  </div>
+  <div id="main">
+    <div id="page-dashboard" class="page active"></div>
+    <div id="page-log" class="page"></div>
+    <div id="page-checkin" class="page"></div>
+    <div id="page-ergs" class="page"></div>
+    <div id="page-calendar" class="page"></div>
+    <div id="page-races" class="page"></div>
+    <div id="page-records" class="page"></div>
+    <div id="page-guide" class="page"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATA LAYER
+// ═══════════════════════════════════════════════════════
+const DB = {
+  getSessions(){ return JSON.parse(localStorage.getItem('rowlog_sessions')||'[]') },
+  saveSessions(d){ localStorage.setItem('rowlog_sessions',JSON.stringify(d)) },
+  getRaces(){ return JSON.parse(localStorage.getItem('rowlog_races')||'[]') },
+  saveRaces(d){ localStorage.setItem('rowlog_races',JSON.stringify(d)) },
+  getDay(date){ return this.getSessions().find(d=>d.date===date)||null },
+  upsertDay(day){
+    const all = this.getSessions();
+    const i = all.findIndex(d=>d.date===day.date);
+    if(i>=0) all[i]=day; else all.push(day);
+    all.sort((a,b)=>a.date<b.date?1:-1);
+    this.saveSessions(all);
+  },
+  getCheckins(){ return JSON.parse(localStorage.getItem('rowlog_checkins')||'[]') },
+  saveCheckins(d){ localStorage.setItem('rowlog_checkins',JSON.stringify(d)) },
+  getCheckin(date){ return this.getCheckins().find(c=>c.date===date)||null },
+  upsertCheckin(ci){
+    const all = this.getCheckins();
+    const i = all.findIndex(c=>c.date===ci.date);
+    if(i>=0) all[i]=ci; else all.push(ci);
+    all.sort((a,b)=>a.date<b.date?1:-1);
+    this.saveCheckins(all);
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+const SESSION_TYPES = ['Race','Water Session','Pieces on Water','Erg UT2','Erg Threshold','Erg Intervals','S&C','Rest','Other'];
+const PIECE_TYPES = ['2k','5k','500m','1k','30 min','60 min','3x10 min','Other'];
+const ERG_TYPES = ['Erg UT2','Erg Threshold','Erg Intervals'];
+
+const TYPE_CHIP = {
+  'Race':'chip-race','Water Session':'chip-water','Pieces on Water':'chip-pieces',
+  'Erg UT2':'chip-ut2','Erg Threshold':'chip-threshold','Erg Intervals':'chip-intervals',
+  'S&C':'chip-sc','Rest':'chip-rest','Other':'chip-other'
+};
+
+const TYPE_COLOR = {
+  'Race':'#B83232','Water Session':'#2A6EA0','Pieces on Water':'#1A7888',
+  'Erg UT2':'#2E7A4A','Erg Threshold':'#A86020','Erg Intervals':'#C96340',
+  'S&C':'#6040A0','Rest':'#8C7660','Other':'#607080'
+};
+
+const INTENSITY_FACTOR = {
+  'Race':1.5,'Water Session':0.6,'Pieces on Water':0.8,
+  'Erg UT2':0.4,'Erg Threshold':1.0,'Erg Intervals':1.2,
+  'S&C':0.5,'Rest':0,'Other':0.6
+};
+
+function chip(type){ return `<span class="chip ${TYPE_CHIP[type]||'chip-other'}">${type}</span>`; }
+
+function today(){ return new Date().toISOString().slice(0,10); }
+
+function dateAdd(d, days){
+  const dt = new Date(d+'T12:00:00');
+  dt.setDate(dt.getDate()+days);
+  return dt.toISOString().slice(0,10);
+}
+
+function dateDiff(a,b){
+  return Math.round((new Date(b)-new Date(a))/(1000*86400));
+}
+
+function parseSplit(s){
+  if(!s||!s.toString().trim()) return null;
+  s = s.toString().trim();
+  const m = s.match(/^(\d+):(\d+\.?\d*)$/);
+  if(!m) return null;
+  return parseInt(m[1])*60 + parseFloat(m[2]);
+}
+
+function formatSplit(secs){
+  if(!secs||secs<=0) return '—';
+  const m = Math.floor(secs/60);
+  const s = (secs%60).toFixed(1).padStart(4,'0');
+  return `${m}:${s}`;
+}
+
+function formatDate(d){
+  if(!d) return '';
+  const dt = new Date(d+'T12:00:00');
+  return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+
+function formatDateShort(d){
+  if(!d) return '';
+  const dt = new Date(d+'T12:00:00');
+  return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+
+function weekStart(d){
+  const dt = new Date(d+'T12:00:00');
+  const day = dt.getDay();
+  const diff = (day===0?-6:1-day);
+  dt.setDate(dt.getDate()+diff);
+  return dt.toISOString().slice(0,10);
+}
+
+function isoWeek(d){
+  const dt = new Date(d+'T12:00:00');
+  const thu = new Date(dt);
+  thu.setDate(dt.getDate() - (dt.getDay()+6)%7 + 3);
+  const jan4 = new Date(thu.getFullYear(),0,4);
+  return 1+Math.round(((thu-jan4)/86400000-(3-((jan4.getDay()+6)%7)))/7);
+}
+
+// ═══════════════════════════════════════════════════════
+// CALCULATIONS
+// ═══════════════════════════════════════════════════════
+function dayTSS(day){
+  if(!day||!day.sessions) return 0;
+  return day.sessions.reduce((sum,s)=>{
+    if(s.type==='Rest') return sum;
+    const dist = s.type==='S&C' ? 10 : (parseFloat(s.distance)||0);
+    const rpe = parseFloat(s.rpe)||1;
+    const intensity = INTENSITY_FACTOR[s.type]??0.6;
+    return sum + dist * rpe * intensity;
+  },0);
+}
+
+function buildFitnessData(days=90){
+  const sessions = DB.getSessions();
+  const sessionMap = {};
+  sessions.forEach(d=>{ sessionMap[d.date]=dayTSS(d); });
+
+  const end = today();
+  const displayStart = dateAdd(end, -days);
+
+  // Warm up from the earliest data point (or at least 90 days before display window)
+  // so CTL/ATL aren't artificially suppressed at the start of the chart.
+  const allDates = Object.keys(sessionMap).sort();
+  const warmupStart = allDates.length
+    ? dateAdd(allDates[0], -42)   // go back an extra 42 days before first session
+    : dateAdd(displayStart, -42);
+
+  const result = [];
+  let ctl=0, atl=0;
+  // Use proper exponential decay constants (TrainingPeaks standard)
+  const ctlDecay = Math.exp(-1/42);
+  const atlDecay = Math.exp(-1/7);
+
+  let cursor = warmupStart;
+  while(cursor <= end){
+    const tss = sessionMap[cursor]||0;
+    ctl = ctl * ctlDecay + tss * (1 - ctlDecay);
+    atl = atl * atlDecay + tss * (1 - atlDecay);
+    if(cursor >= displayStart){
+      result.push({ date:cursor, tss, ctl:+ctl.toFixed(1), atl:+atl.toFixed(1), tsb:+(ctl-atl).toFixed(1) });
+    }
+    cursor = dateAdd(cursor, 1);
+  }
+  return result;
+}
+
+function getWeeklyData(weeks=12){
+  const sessions = DB.getSessions();
+  const weekMap = {};
+  sessions.forEach(day=>{
+    const w = weekStart(day.date);
+    if(!weekMap[w]) weekMap[w]={ total:0, types:{} };
+    day.sessions.forEach(s=>{
+      if(s.type==='Rest') return;
+      const dist = parseFloat(s.distance)||0;
+      weekMap[w].total += dist;
+      weekMap[w].types[s.type] = (weekMap[w].types[s.type]||0)+dist;
+    });
+  });
+
+  const result = [];
+  for(let i=weeks-1; i>=0; i--){
+    const w = weekStart(dateAdd(today(),-i*7));
+    result.push({ week:w, ...(weekMap[w]||{total:0,types:{}}) });
+  }
+  return result;
+}
+
+function getPBs(){
+  const sessions = DB.getSessions();
+  const pbs = {}; // pieceType -> { splitSecs, distance, date }
+  sessions.forEach(day=>{
+    day.sessions.forEach(s=>{
+      if(!s.pieceType) return;
+      const pt = s.pieceType;
+      if(pt==='30 min'||pt==='60 min'){
+        // Distance based
+        const dist = parseFloat(s.distance)||0;
+        if(!pbs[pt]||dist>pbs[pt].distance){
+          pbs[pt]={ distance:dist, date:day.date, splitSecs:null };
+        }
+      } else {
+        const ss = parseSplit(s.split)||s.splitSecs;
+        if(!ss) return;
+        if(!pbs[pt]||ss<pbs[pt].splitSecs){
+          pbs[pt]={ splitSecs:ss, date:day.date, distance:null, prev: pbs[pt]||null };
+        }
+      }
+    });
+  });
+  return pbs;
+}
+
+function getYTDDistance(){
+  const yr = today().slice(0,4);
+  return DB.getSessions().filter(d=>d.date.startsWith(yr)).reduce((sum,d)=>{
+    return sum+d.sessions.reduce((s2,s)=>(s.type==='S&C'||s.type==='Rest')?s2:s2+(parseFloat(s.distance)||0),0);
+  },0);
+}
+
+function getThisWeekSessions(){
+  const w = weekStart(today());
+  const sessions = DB.getSessions().filter(d=>weekStart(d.date)===w);
+  return { count: sessions.reduce((s,d)=>s+d.sessions.filter(s2=>s2.type!=='Rest').length,0),
+           dist: sessions.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>(s3.type==='S&C'||s3.type==='Rest')?s2:s2+(parseFloat(s3.distance)||0),0),0) };
+}
+
+function getNextRace(){
+  const t = today();
+  const races = DB.getRaces().filter(r=>r.date>=t).sort((a,b)=>a.date<b.date?-1:1);
+  if(!races.length) return null;
+  return { ...races[0], daysLeft: dateDiff(t,races[0].date) };
+}
+
+function getRecentPBs(){
+  // Find sessions in last 14 days that are PBs
+  const sessions = DB.getSessions();
+  const pbs = getPBs();
+  const recent = [];
+  const cutoff = dateAdd(today(),-14);
+  sessions.filter(d=>d.date>=cutoff).forEach(day=>{
+    day.sessions.forEach(s=>{
+      if(!s.pieceType) return;
+      const pb = pbs[s.pieceType];
+      if(!pb) return;
+      if(pb.date===day.date){
+        recent.push({ type:s.pieceType, date:day.date, splitSecs:pb.splitSecs, distance:pb.distance });
+      }
+    });
+  });
+  return recent;
+}
+
+function getSleepData(weeks=8){
+  const result = [];
+  for(let i=weeks-1; i>=0; i--){
+    const w = weekStart(dateAdd(today(),-i*7));
+    const days = DB.getSessions().filter(d=>weekStart(d.date)===w&&d.sleep&&d.sleep.hours);
+    const avg = days.length ? (days.reduce((s,d)=>s+parseFloat(d.sleep.hours),0)/days.length) : null;
+    result.push({ week:w, avg });
+  }
+  return result;
+}
+
+function sleepHrsScore(hrs){
+  // 0–10 score peaking at 8–9h
+  if(!hrs) return 5;
+  const h = parseFloat(hrs);
+  if(h>=8&&h<=9) return 10;
+  if(h>=7&&h<8) return 7 + (h-7)*3;
+  if(h>9&&h<=10) return 10 - (h-9)*3;
+  if(h>=6&&h<7) return 4 + (h-6)*3;
+  if(h>10) return Math.max(4, 10-(h-10)*3);
+  return Math.max(0, h/6*4);
+}
+
+function calcReadinessScore(ci, tsb){
+  // ci: { fatigue, mood, soreness, stress, sleepHrs, sleepQuality }
+  // TSB component: map tsb -30..+20 → 0..100
+  const tsbScore = Math.min(100, Math.max(0, ((tsb+30)/50)*100));
+  const sleepHrs = sleepHrsScore(ci.sleepHrs) * 10;
+  const sleepQual = ci.sleepQuality ? ((parseFloat(ci.sleepQuality)/10)*100) : 50;
+  // Wellness: avg of 4 sliders inverted where needed (lower fatigue/soreness/stress = better)
+  const wellness = (
+    ((11 - (parseFloat(ci.fatigue)||5)) / 10 * 100) +
+    ((parseFloat(ci.mood)||5) / 10 * 100) +
+    ((11 - (parseFloat(ci.soreness)||5)) / 10 * 100) +
+    ((11 - (parseFloat(ci.stress)||5)) / 10 * 100)
+  ) / 4;
+  return Math.round(tsbScore*0.30 + sleepHrs*0.25 + sleepQual*0.20 + wellness*0.25);
+}
+
+function getTrafficLight(score){
+  if(score>=75) return 'green';
+  if(score>=50) return 'amber';
+  return 'red';
+}
+
+function getSleepStats(){
+  const days = DB.getSessions().filter(d=>d.sleep&&d.sleep.hours).sort((a,b)=>a.date<b.date?-1:1);
+  if(!days.length) return { avgHrs:null, debtHrs:null, consistency:null, avgQuality:null };
+  // Last 7 days for debt
+  const last7 = days.filter(d=>d.date>=dateAdd(today(),-6));
+  const debt = last7.reduce((s,d)=>s+Math.max(0,8-parseFloat(d.sleep.hours)),0);
+  // All days for avg
+  const avgHrs = days.reduce((s,d)=>s+parseFloat(d.sleep.hours),0)/days.length;
+  // Bedtime consistency (std dev of bedtime minutes, last 14 days)
+  const last14 = days.filter(d=>d.date>=dateAdd(today(),-13)&&d.sleep.bedtime);
+  let consistency = null;
+  if(last14.length>=3){
+    const mins = last14.map(d=>{
+      const [h,m] = d.sleep.bedtime.split(':').map(Number);
+      return h<12 ? h*60+m+1440 : h*60+m; // normalize midnight-crossers
+    });
+    const mean = mins.reduce((s,v)=>s+v,0)/mins.length;
+    const sd = Math.sqrt(mins.reduce((s,v)=>s+(v-mean)**2,0)/mins.length);
+    consistency = Math.max(1, Math.round(10 - sd/6)); // sd of 0 → 10, sd of 60 → 0
+  }
+  const withQuality = days.filter(d=>d.sleep.quality);
+  const avgQuality = withQuality.length ? withQuality.reduce((s,d)=>s+parseFloat(d.sleep.quality),0)/withQuality.length : null;
+  return { avgHrs, debtHrs:debt, consistency, avgQuality };
+}
+
+function getSleepNightlyData(n=28){
+  const result = [];
+  for(let i=n-1; i>=0; i--){
+    const date = dateAdd(today(),-i);
+    const day = DB.getDay(date);
+    const hrs = day&&day.sleep&&day.sleep.hours ? parseFloat(day.sleep.hours) : null;
+    const quality = day&&day.sleep&&day.sleep.quality ? parseFloat(day.sleep.quality) : null;
+    result.push({ date, hrs, quality });
+  }
+  return result;
+}
+
+function getReadinessTrendData(n=28){
+  const fitness = buildFitnessData(n+10);
+  const result = [];
+  for(let i=n-1; i>=0; i--){
+    const date = dateAdd(today(),-i);
+    const ci = DB.getCheckin(date);
+    const fit = fitness.find(f=>f.date===date);
+    const tsb = fit ? fit.tsb : 0;
+    if(ci){
+      const prevDay = DB.getDay(dateAdd(date,-1)); // sleep logged on check-in date was from previous night
+      const sleepHrs = prevDay&&prevDay.sleep ? prevDay.sleep.hours : null;
+      const sleepQuality = prevDay&&prevDay.sleep ? prevDay.sleep.quality : null;
+      const score = calcReadinessScore({ ...ci, sleepHrs, sleepQuality }, tsb);
+      result.push({ date, score, light: getTrafficLight(score) });
+    } else {
+      result.push({ date, score:null, light:null });
+    }
+  }
+  return result;
+}
+
+function getWeeklySummary(){
+  const trendData = getReadinessTrendData(7);
+  const withScores = trendData.filter(d=>d.score!==null);
+  if(!withScores.length) return null;
+  const avg = Math.round(withScores.reduce((s,d)=>s+d.score,0)/withScores.length);
+  const light = getTrafficLight(avg);
+  const fitness = buildFitnessData(7);
+  const todayFit = fitness[fitness.length-1]||{ctl:0,atl:0,tsb:0};
+  let recommendation = '';
+  if(light==='green') recommendation = 'Conditions look good — train hard, push quality sessions.';
+  else if(light==='amber') recommendation = 'Mixed signals — keep intensity moderate and monitor recovery.';
+  else recommendation = 'Signs of fatigue — prioritise sleep and consider a recovery day.';
+  return { avg, light, recommendation, tsb: todayFit.tsb, ctl: todayFit.ctl };
+}
+
+// ═══════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════
+const charts = {};
+function mkChart(id,cfg){
+  if(charts[id]){ charts[id].destroy(); delete charts[id]; }
+  const el = document.getElementById(id);
+  if(!el) return null;
+  charts[id] = new Chart(el,cfg);
+  return charts[id];
+}
+
+Chart.defaults.color = '#8C7660';
+Chart.defaults.borderColor = '#DDD4C4';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+
+function renderFitnessChart(){
+  const data = buildFitnessData(90);
+  mkChart('chart-fitness',{
+    type:'line',
+    data:{
+      labels: data.map(d=>formatDateShort(d.date)),
+      datasets:[
+        { label:'CTL (Fitness)',data:data.map(d=>d.ctl),borderColor:'#C96340',backgroundColor:'rgba(201,99,64,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:2 },
+        { label:'ATL (Fatigue)',data:data.map(d=>d.atl),borderColor:'#A86020',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5 },
+        { label:'TSB (Form)',data:data.map(d=>d.tsb),borderColor:'#2E7A4A',backgroundColor:'transparent',fill:false,tension:0.3,pointRadius:0,borderWidth:1.5 }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,aspectRatio:2,
+      plugins:{ legend:{display:false,labels:{boxWidth:0}}, tooltip:{mode:'index',intersect:false,backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1,padding:10} },
+      scales:{
+        x:{ grid:{color:'rgba(180,160,140,0.2)'}, ticks:{maxTicksLimit:10,maxRotation:0} },
+        y:{ grid:{color:'rgba(180,160,140,0.2)'} }
+      },
+      interaction:{ mode:'nearest',axis:'x',intersect:false }
+    }
+  });
+}
+
+function renderWeeklyChart(){
+  const data = getWeeklyData(12);
+  const types = ['Race','Pieces on Water','Water Session','Erg Intervals','Erg Threshold','Erg UT2','S&C'];
+  // Build readiness avg per week
+  const readinessByWeek = data.map(d=>{
+    const weekDays = [];
+    for(let i=0;i<7;i++){
+      const date = dateAdd(d.week,i);
+      const ci = DB.getCheckin(date);
+      if(ci){
+        const day = DB.getDay(date);
+        const fit = buildFitnessData(14).find(f=>f.date===date);
+        const tsb = fit?fit.tsb:0;
+        const score = calcReadinessScore({...ci, sleepHrs:day&&day.sleep?day.sleep.hours:null, sleepQuality:day&&day.sleep?day.sleep.quality:null}, tsb);
+        weekDays.push(score);
+      }
+    }
+    return weekDays.length ? Math.round(weekDays.reduce((s,v)=>s+v,0)/weekDays.length) : null;
+  });
+
+  mkChart('chart-weekly',{
+    type:'bar',
+    data:{
+      labels: data.map(d=>formatDateShort(d.week)),
+      datasets: [
+        ...types.map(t=>({
+          label:t,
+          data: data.map(d=>(d.types&&d.types[t])||0),
+          backgroundColor: TYPE_COLOR[t]+'99',
+          borderColor: TYPE_COLOR[t],
+          borderWidth:1,
+          borderRadius:2,
+          stack:'dist',
+          yAxisID:'y'
+        })),
+        {
+          label:'Readiness',
+          type:'line',
+          data: readinessByWeek,
+          borderColor:'#C96340',
+          backgroundColor:'transparent',
+          pointBackgroundColor: readinessByWeek.map(v=>v===null?'transparent':v>=75?'#2E7A4A':v>=50?'#A86020':'#B83232'),
+          pointRadius:5,
+          pointBorderColor:'#FDFAF6',
+          pointBorderWidth:1.5,
+          borderWidth:2,
+          tension:0.3,
+          spanGaps:true,
+          yAxisID:'y2',
+          stack:undefined
+        }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,aspectRatio:2,
+      plugins:{ legend:{display:false,labels:{boxWidth:0}}, tooltip:{mode:'index',intersect:false,backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1} },
+      scales:{
+        x:{ stacked:true,grid:{display:false},ticks:{maxRotation:0} },
+        y:{ stacked:true,grid:{color:'rgba(180,160,140,0.2)'},title:{display:true,text:'km',color:'#8C7660'} },
+        y2:{ position:'right',min:0,max:100,grid:{display:false},title:{display:true,text:'Readiness',color:'#C96340'},ticks:{color:'#C96340',callback(v){return v+'%'}} }
+      }
+    }
+  });
+}
+
+function renderReadinessTrendChart(canvasId){
+  const data = getReadinessTrendData(28);
+  mkChart(canvasId,{
+    type:'line',
+    data:{
+      labels: data.map(d=>formatDateShort(d.date)),
+      datasets:[{
+        label:'Readiness',
+        data: data.map(d=>d.score),
+        borderColor:'rgba(201,99,64,0.5)',
+        backgroundColor:'transparent',
+        pointBackgroundColor: data.map(d=>d.light==='green'?'#2E7A4A':d.light==='amber'?'#A86020':d.light==='red'?'#B83232':'transparent'),
+        pointRadius: data.map(d=>d.score!==null?5:0),
+        pointBorderColor:'#FDFAF6',
+        pointBorderWidth:1.5,
+        borderWidth:1.5,
+        tension:0.3,
+        spanGaps:true
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,aspectRatio:2,
+      plugins:{
+        legend:{display:false,labels:{boxWidth:0}},
+        tooltip:{backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1,callbacks:{label(ctx){return ctx.raw!==null?' Readiness: '+ctx.raw+'/100':' No check-in';}}}
+      },
+      scales:{
+        x:{ grid:{color:'rgba(180,160,140,0.2)'},ticks:{maxTicksLimit:8,maxRotation:0} },
+        y:{ min:0,max:100,grid:{color:'rgba(180,160,140,0.2)'},ticks:{callback(v){return v+'%'}} }
+      },
+      annotation:{
+        annotations:{
+          green:{ type:'box',yMin:75,yMax:100,backgroundColor:'rgba(46,122,74,0.05)',borderWidth:0 },
+          amber:{ type:'box',yMin:50,yMax:75,backgroundColor:'rgba(168,96,32,0.05)',borderWidth:0 },
+          red:{ type:'box',yMin:0,yMax:50,backgroundColor:'rgba(184,50,50,0.05)',borderWidth:0 }
+        }
+      }
+    }
+  });
+}
+
+function renderErgProgressChart(canvasId, pieceType, allSessions){
+  const pts = [];
+  allSessions.forEach(day=>{
+    day.sessions.forEach(s=>{
+      if(s.pieceType===pieceType&&s.split){
+        const ss = parseSplit(s.split)||s.splitSecs;
+        if(ss) pts.push({ x:day.date, y:ss });
+      }
+    });
+  });
+  pts.sort((a,b)=>a.x<b.x?-1:1);
+
+  mkChart(canvasId,{
+    type:'line',
+    data:{
+      labels:pts.map(p=>formatDateShort(p.x)),
+      datasets:[{ label:`${pieceType} Split`,data:pts.map(p=>p.y),borderColor:'#C96340',backgroundColor:'rgba(201,99,64,0.07)',fill:true,tension:0.2,pointRadius:4,pointBackgroundColor:'#C96340',pointBorderColor:'#FDFAF6',pointBorderWidth:1.5,borderWidth:2 }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,aspectRatio:2,
+      plugins:{ legend:{display:false,labels:{boxWidth:0}}, tooltip:{ backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1,callbacks:{ label(ctx){ return ' '+formatSplit(ctx.parsed.y); } } } },
+      scales:{
+        x:{ grid:{color:'rgba(180,160,140,0.2)'}, ticks:{maxTicksLimit:8,maxRotation:0} },
+        y:{ reverse:true, grid:{color:'rgba(180,160,140,0.2)'}, ticks:{ callback(v){ return formatSplit(v); } } }
+      }
+    }
+  });
+}
+
+function renderSleepNightlyChart(canvasId){
+  const data = getSleepNightlyData(28);
+  mkChart(canvasId,{
+    type:'bar',
+    data:{
+      labels: data.map(d=>formatDateShort(d.date)),
+      datasets:[
+        {
+          label:'Sleep hrs',
+          data: data.map(d=>d.hrs),
+          backgroundColor: data.map(d=>d.hrs===null?'transparent':d.hrs>=8?'rgba(46,122,74,0.6)':d.hrs>=7?'rgba(168,96,32,0.6)':'rgba(184,50,50,0.6)'),
+          borderColor: data.map(d=>d.hrs===null?'transparent':d.hrs>=8?'#2E7A4A':d.hrs>=7?'#A86020':'#B83232'),
+          borderWidth:1,
+          borderRadius:2,
+          yAxisID:'y'
+        },
+        {
+          label:'Quality',
+          type:'line',
+          data: data.map(d=>d.quality),
+          borderColor:'#6040A0',
+          backgroundColor:'transparent',
+          pointBackgroundColor:'#6040A0',
+          pointRadius:3,
+          pointBorderColor:'#FDFAF6',
+          pointBorderWidth:1,
+          borderWidth:1.5,
+          tension:0.3,
+          spanGaps:true,
+          yAxisID:'y2'
+        },
+        {
+          label:'8hr target',
+          type:'line',
+          data: data.map(()=>8),
+          borderColor:'rgba(201,99,64,0.4)',
+          borderWidth:1,
+          borderDash:[4,4],
+          pointRadius:0,
+          yAxisID:'y'
+        }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,aspectRatio:2,
+      plugins:{ legend:{display:false,labels:{boxWidth:0}}, tooltip:{mode:'index',intersect:false,backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1} },
+      scales:{
+        x:{ grid:{display:false},ticks:{maxTicksLimit:8,maxRotation:0} },
+        y:{ min:0,max:12,grid:{color:'rgba(180,160,140,0.2)'},ticks:{callback(v){return v+'h'}} },
+        y2:{ position:'right',min:0,max:10,grid:{display:false},ticks:{color:'#6040A0',callback(v){return v}} }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════
+function renderReadinessRingHTML(score, light){
+  const r = 46, circ = 2*Math.PI*r;
+  const dash = (score/100)*circ;
+  const color = light==='green'?'#2E7A4A':light==='amber'?'#A86020':'#B83232';
+  return `<div class="readiness-ring">
+    <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)">
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--bg2)" stroke-width="8"/>
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+        stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}" stroke-linecap="round"/>
+    </svg>
+    <div class="readiness-ring-inner">
+      <div style="font-size:22px;font-weight:700;color:${color};line-height:1">${score}</div>
+      <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">readiness</div>
+    </div>
+  </div>`;
+}
+
+function renderDashboard(){
+  const page = document.getElementById('page-dashboard');
+  const ytd = getYTDDistance();
+  const week = getThisWeekSessions();
+  const nextRace = getNextRace();
+  const recentPBs = getRecentPBs();
+  const fitness = buildFitnessData(90);
+  const todayFit = fitness[fitness.length-1]||{ctl:0,atl:0,tsb:0};
+  const todayCheckin = DB.getCheckin(today());
+  const summary = getWeeklySummary();
+  const sleepStats = getSleepStats();
+  const hasTodayCheckin = !!todayCheckin;
+
+  // Compute today readiness if we have a check-in
+  let todayScore = null, todayLight = null;
+  if(todayCheckin){
+    const prevDay = DB.getDay(dateAdd(today(),-1)); // sleep was from last night
+    todayScore = calcReadinessScore({
+      ...todayCheckin,
+      sleepHrs: prevDay&&prevDay.sleep ? prevDay.sleep.hours : null,
+      sleepQuality: prevDay&&prevDay.sleep ? prevDay.sleep.quality : null
+    }, todayFit.tsb);
+    todayLight = getTrafficLight(todayScore);
+  }
+
+  page.innerHTML = `
+    ${!hasTodayCheckin ? `
+    <div class="checkin-banner">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      <span>No morning check-in today — log your readiness for personalised insights.</span>
+      <button class="btn btn-sm" onclick="navigate('checkin')" style="margin-left:auto;background:var(--accent);color:#fff;border:none">Check in now</button>
+    </div>
+    ` : ''}
+
+    <h2>Dashboard</h2>
+
+    ${summary ? `
+    <div class="summary-card traffic-${summary.light}" style="margin-bottom:16px">
+      ${todayScore!==null ? renderReadinessRingHTML(todayScore, todayLight) : ''}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:4px">Weekly Readiness Summary</div>
+        <div style="font-size:15px;color:var(--bright);font-weight:500">${summary.recommendation}</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:6px">7-day avg readiness <strong>${summary.avg}/100</strong> · TSB <strong style="color:${summary.tsb>=0?'var(--green)':'var(--red)'}">${summary.tsb>0?'+':''}${summary.tsb}</strong> · CTL <strong>${summary.ctl}</strong></div>
+      </div>
+      <div class="summary-metric">
+        <div class="traffic-light traffic-${summary.light}">${summary.light.toUpperCase()}</div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="stat-bar">
+      <div class="stat-item">
+        <div class="stat-val">${ytd.toFixed(0)}<span style="font-size:14px;color:var(--text2)">km</span></div>
+        <div class="stat-label">YTD Distance</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val">${week.count}</div>
+        <div class="stat-label">Sessions This Week</div>
+        <div class="stat-sub">${week.dist.toFixed(1)} km</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val ${todayFit.tsb>=0?'text-green':'text-red'}">${todayFit.tsb>0?'+':''}${todayFit.tsb}</div>
+        <div class="stat-label">Form (TSB)</div>
+        <div class="stat-sub" style="color:var(--text2)">CTL ${todayFit.ctl} · ATL ${todayFit.atl}</div>
+      </div>
+      <div class="stat-item">
+        ${nextRace
+          ? `<div class="stat-val text-accent">${nextRace.daysLeft}d</div>
+             <div class="stat-label">Next Race</div>
+             <div class="stat-sub">${nextRace.name}</div>`
+          : `<div class="stat-val text-muted">—</div><div class="stat-label">Next Race</div><div class="stat-sub" style="color:var(--text3)">None scheduled</div>`
+        }
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:10px">
+          <h3 style="margin:0">Fitness / Fatigue / Form</h3>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#C96340"></div>CTL</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#A86020"></div>ATL</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#2E7A4A"></div>TSB</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-fitness"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:10px">
+          <h3 style="margin:0">Weekly Distance + Readiness</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            ${['Race','Pieces on Water','Erg Intervals','Erg UT2'].map(t=>`<div class="legend-item"><div class="legend-dot" style="background:${TYPE_COLOR[t]}"></div><span>${t}</span></div>`).join('')}
+            <div class="legend-item"><div class="legend-dot" style="background:#C96340"></div>Readiness</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-weekly"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card mt-16">
+      <h3>Readiness Trend — 28 days</h3>
+      <div class="chart-wrap"><canvas id="chart-readiness-trend"></canvas></div>
+    </div>
+
+    <div class="grid grid-2 mt-16">
+      <div class="card">
+        <h3>Erg Progression — 2k</h3>
+        <div class="chart-wrap"><canvas id="chart-erg-dash"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:10px">
+          <h3 style="margin:0">Sleep — 28 nights</h3>
+          <div style="display:flex;gap:12px">
+            <div class="legend-item"><div class="legend-dot" style="background:#2E7A4A"></div>≥8h</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#A86020"></div>7–8h</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#B83232"></div>&lt;7h</div>
+          </div>
+        </div>
+        ${sleepStats.avgHrs!==null ? `
+        <div class="sleep-stat-grid" style="margin-bottom:12px">
+          <div class="sleep-stat">
+            <div class="sleep-stat-val">${sleepStats.avgHrs.toFixed(1)}h</div>
+            <div class="sleep-stat-label">Avg Sleep</div>
+          </div>
+          <div class="sleep-stat">
+            <div class="sleep-stat-val ${sleepStats.debtHrs>2?'text-red':'text-green'}">${sleepStats.debtHrs.toFixed(1)}h</div>
+            <div class="sleep-stat-label">7-day Debt</div>
+          </div>
+          <div class="sleep-stat">
+            <div class="sleep-stat-val">${sleepStats.consistency!==null?sleepStats.consistency+'/10':'—'}</div>
+            <div class="sleep-stat-label">Consistency</div>
+          </div>
+          <div class="sleep-stat">
+            <div class="sleep-stat-val">${sleepStats.avgQuality!==null?sleepStats.avgQuality.toFixed(1)+'/10':'—'}</div>
+            <div class="sleep-stat-label">Avg Quality</div>
+          </div>
+        </div>
+        ` : '<p style="color:var(--text3);font-size:12px;margin-bottom:12px">Log sleep in the Training Log to see sleep data.</p>'}
+        <div class="chart-wrap"><canvas id="chart-sleep-nightly"></canvas></div>
+      </div>
+    </div>
+
+    ${recentPBs.length ? `
+    <div class="card mt-16">
+      <h3>Recent PBs <span class="badge">New</span></h3>
+      <div class="tag-row">
+        ${recentPBs.map(pb=>`
+          <div style="background:rgba(168,96,32,0.06);border:1px solid rgba(168,96,32,0.22);border-radius:7px;padding:12px 16px;display:inline-flex;flex-direction:column;gap:2px">
+            <div style="font-size:9.5px;color:var(--amber);text-transform:uppercase;letter-spacing:1px;font-weight:500">${pb.type}</div>
+            <div style="font-size:18px;font-weight:600;color:var(--bright)">${pb.splitSecs?formatSplit(pb.splitSecs):pb.distance+'km'}</div>
+            <div style="font-size:10px;color:var(--text2)">${formatDate(pb.date)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+  `;
+
+  setTimeout(()=>{
+    renderFitnessChart();
+    renderWeeklyChart();
+    renderReadinessTrendChart('chart-readiness-trend');
+    renderErgProgressChart('chart-erg-dash','2k',DB.getSessions());
+    renderSleepNightlyChart('chart-sleep-nightly');
+  },0);
+}
+
+// ═══════════════════════════════════════════════════════
+// LOG PAGE
+// ═══════════════════════════════════════════════════════
+let logDate = today();
+let logSessions = [newSession()];
+
+function newSession(){
+  return { type:'Erg UT2',pieceType:'',distance:'',split:'',rate:'',rpe:'',notes:'',exercises:[] };
+}
+
+function renderLog(dateParam){
+  if(dateParam) logDate = dateParam;
+  const page = document.getElementById('page-log');
+  const existing = DB.getDay(logDate);
+  if(existing){
+    logSessions = existing.sessions.map(s=>({...s,exercises:s.exercises||[]}));
+  } else {
+    logSessions = [newSession()];
+  }
+
+  page.innerHTML = `
+    <div class="page-header">
+      <h2>Training Log</h2>
+      <div class="flex-center gap-8">
+        <button class="btn btn-ghost btn-sm" onclick="logDate=dateAdd(logDate,-1);renderLog()">← Prev</button>
+        <input type="date" value="${logDate}" onchange="logDate=this.value;renderLog()" style="width:150px">
+        <button class="btn btn-ghost btn-sm" onclick="logDate=dateAdd(logDate,1);renderLog()">Next →</button>
+      </div>
+    </div>
+    <div id="log-sessions"></div>
+    <button class="btn btn-ghost btn-sm" onclick="addSession()" style="margin-bottom:20px" ${logSessions.length>=3?'disabled':''}>
+      + Add Session ${logSessions.length>=3?'(max 3)':''}
+    </button>
+
+    <div style="margin-top:4px;display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" onclick="saveLog()">Save Log</button>
+      <span id="log-saved" style="color:var(--green);font-size:12px;display:none">✓ Saved</span>
+    </div>
+  `;
+
+  renderLogSessions();
+}
+
+function renderLogSessions(){
+  const wrap = document.getElementById('log-sessions');
+  if(!wrap) return;
+  wrap.innerHTML = logSessions.map((s,i)=>renderSessionBlock(s,i)).join('');
+}
+
+function renderSessionBlock(s,i){
+  const isSC = s.type==='S&C';
+  return `
+    <div class="session-block" id="session-${i}">
+      <div class="session-block-header">
+        <span class="session-num">Session ${i+1}</span>
+        ${logSessions.length>1?`<button class="btn-icon" onclick="removeSession(${i})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`:''}
+      </div>
+      <div class="form-row form-row-2" style="margin-bottom:10px">
+        <div class="form-group">
+          <label>Session Type</label>
+          <select onchange="updateSessionType(${i},this.value)">
+            ${SESSION_TYPES.map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        ${ERG_TYPES.includes(s.type)?`
+        <div class="form-group">
+          <label>Piece Type</label>
+          <select onchange="logSessions[${i}].pieceType=this.value">
+            <option value="">— Select —</option>
+            ${PIECE_TYPES.map(p=>`<option value="${p}" ${s.pieceType===p?'selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>` : '<div></div>'}
+      </div>
+      ${isSC ? renderSCBlock(s,i) : renderRowingBlock(s,i)}
+      <div class="form-group" style="margin-top:10px">
+        <label>Notes</label>
+        <textarea onchange="logSessions[${i}].notes=this.value" rows="2">${s.notes||''}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function renderRowingBlock(s,i){
+  return `
+    <div class="form-row form-row-4">
+      <div class="form-group">
+        <label>Distance (km)</label>
+        <input type="number" value="${s.distance||''}" step="0.1" min="0" placeholder="6.0" onchange="logSessions[${i}].distance=this.value">
+      </div>
+      <div class="form-group">
+        <label>Split /500m</label>
+        <input type="text" value="${s.split||''}" placeholder="1:52.3" onchange="logSessions[${i}].split=this.value;logSessions[${i}].splitSecs=parseSplit(this.value)">
+      </div>
+      <div class="form-group">
+        <label>Stroke Rate</label>
+        <input type="number" value="${s.rate||''}" min="10" max="50" placeholder="20" onchange="logSessions[${i}].rate=this.value">
+      </div>
+      <div class="form-group">
+        <label>RPE (1–10)</label>
+        <input type="number" value="${s.rpe||''}" min="1" max="10" placeholder="7" onchange="logSessions[${i}].rpe=this.value">
+      </div>
+    </div>
+  `;
+}
+
+function renderSCBlock(s,i){
+  const exs = s.exercises||[];
+  return `
+    <div>
+      <label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Exercises</label>
+      <div id="sc-exercises-${i}">
+        ${exs.map((ex,j)=>`
+          <div class="exercise-row">
+            <input type="text" value="${ex.name||''}" placeholder="Exercise name" onchange="logSessions[${i}].exercises[${j}].name=this.value">
+            <input type="text" value="${ex.sets||''}" placeholder="Sets" onchange="logSessions[${i}].exercises[${j}].sets=this.value">
+            <input type="text" value="${ex.reps||''}" placeholder="Reps" onchange="logSessions[${i}].exercises[${j}].reps=this.value">
+            <input type="text" value="${ex.weight||''}" placeholder="kg" onchange="logSessions[${i}].exercises[${j}].weight=this.value">
+            <button class="btn-icon" onclick="removeExercise(${i},${j})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+        `).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+        <button class="btn btn-ghost btn-sm" onclick="addExercise(${i})">+ Exercise</button>
+        <div class="form-group" style="margin:0;display:flex;align-items:center;gap:8px">
+          <label style="margin:0;white-space:nowrap">RPE</label>
+          <input type="number" value="${s.rpe||''}" min="1" max="10" style="width:70px" onchange="logSessions[${i}].rpe=this.value">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function addSession(){ if(logSessions.length<3){ logSessions.push(newSession()); renderLogSessions(); } }
+function removeSession(i){ logSessions.splice(i,1); renderLogSessions(); }
+
+function updateSessionType(i,type){
+  logSessions[i].type = type;
+  if(type==='S&C'){ logSessions[i].exercises=[]; logSessions[i].pieceType=''; }
+  renderLogSessions();
+}
+
+function addExercise(i){ logSessions[i].exercises.push({name:'',sets:'',reps:'',weight:''}); renderLogSessions(); }
+function removeExercise(i,j){ logSessions[i].exercises.splice(j,1); renderLogSessions(); }
+
+
+function saveLog(){
+  const existing = DB.getDay(logDate);
+  const day = { date:logDate, sessions:logSessions.map(s=>({...s,splitSecs:parseSplit(s.split)||s.splitSecs})), sleep: existing?.sleep||{} };
+  DB.upsertDay(day);
+  const msg = document.getElementById('log-saved');
+  if(msg){ msg.style.display='inline'; setTimeout(()=>msg.style.display='none',2000); }
+}
+
+// ═══════════════════════════════════════════════════════
+// ERGS PAGE
+// ═══════════════════════════════════════════════════════
+let ergFilter = 'All';
+
+function renderErgs(){
+  const page = document.getElementById('page-ergs');
+  const pbs = getPBs();
+  const sessions = DB.getSessions();
+  const allErgs = [];
+  sessions.forEach(day=>{
+    day.sessions.forEach(s=>{
+      if(ERG_TYPES.includes(s.type)||s.pieceType){
+        allErgs.push({...s,date:day.date,splitSecs:parseSplit(s.split)||s.splitSecs});
+      }
+    });
+  });
+  allErgs.sort((a,b)=>a.date<b.date?1:-1);
+  const filtered = ergFilter==='All'?allErgs:allErgs.filter(s=>s.pieceType===ergFilter);
+  const hasPBs = Object.keys(pbs).length>0;
+
+  page.innerHTML = `
+    <h2>Ergs</h2>
+    <div class="card" style="margin-bottom:16px">
+      <h3>PB Board</h3>
+      ${hasPBs ? `
+      <div class="pb-grid">
+        ${PIECE_TYPES.slice(0,6).map(pt=>{
+          const pb = pbs[pt];
+          return `
+            <div class="pb-card ${pb?'has-pb':''}">
+              <div class="pb-type">${pt}</div>
+              ${pb ? `
+                <div class="pb-val">${pb.splitSecs?formatSplit(pb.splitSecs):pb.distance+'km'}</div>
+                <div class="pb-date">${formatDate(pb.date)}</div>
+                ${pb.prev?`<div class="pb-prev">▲ from ${pb.prev.splitSecs?formatSplit(pb.prev.splitSecs):pb.prev.distance+'km'}</div>`:''}
+              ` : `<div class="pb-val text-muted">—</div><div class="pb-date" style="color:var(--text3)">No data</div>`}
+            </div>
+          `;
+        }).join('')}
+      </div>
+      ` : `<div class="empty-state" style="padding:20px"><p>Log erg sessions with piece types to see PBs</p></div>`}
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="flex-between" style="margin-bottom:12px">
+        <h3 style="margin:0">Progression</h3>
+        <div class="filter-row" style="margin:0">
+          ${['2k','5k','1k','500m'].map(pt=>`<button class="filter-btn ${ergFilter===pt?'active':''}" onclick="ergFilter='${pt}';renderErgs()">${pt}</button>`).join('')}
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-erg-prog"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px">
+        <h3 style="margin:0">All Erg Sessions</h3>
+        <div class="filter-row" style="margin:0">
+          <button class="filter-btn ${ergFilter==='All'?'active':''}" onclick="ergFilter='All';renderErgs()">All</button>
+          ${PIECE_TYPES.map(pt=>`<button class="filter-btn ${ergFilter===pt?'active':''}" onclick="ergFilter='${pt}';renderErgs()">${pt}</button>`).join('')}
+        </div>
+      </div>
+      ${filtered.length ? `
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Piece</th><th>Distance</th><th>Split</th><th>Rate</th><th>RPE</th><th>Notes</th></tr></thead>
+        <tbody>
+          ${filtered.map(s=>`
+            <tr>
+              <td>${formatDate(s.date)}</td>
+              <td>${chip(s.type)}</td>
+              <td>${s.pieceType?`<span class="chip chip-other">${s.pieceType}</span>`:'—'}</td>
+              <td>${s.distance?s.distance+'km':'—'}</td>
+              <td style="color:var(--accent);font-weight:500">${s.split||'—'}</td>
+              <td>${s.rate||'—'}</td>
+              <td>${s.rpe||'—'}</td>
+              <td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis">${s.notes||'—'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      ` : `<div class="empty-state"><p>No erg sessions logged yet</p></div>`}
+    </div>
+  `;
+
+  setTimeout(()=>{
+    const pt = ergFilter==='All'?'2k':ergFilter;
+    renderErgProgressChart('chart-erg-prog',pt,DB.getSessions());
+  },0);
+}
+
+// ═══════════════════════════════════════════════════════
+// CALENDAR PAGE
+// ═══════════════════════════════════════════════════════
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+
+function renderCalendar(){
+  const page = document.getElementById('page-calendar');
+  const sessions = DB.getSessions();
+  const sessionMap = {};
+  sessions.forEach(d=>{ sessionMap[d.date] = d; });
+
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
+  const firstDow = new Date(calYear,calMonth,1).getDay();
+  const startOffset = (firstDow+6)%7; // Mon=0
+  const t = today();
+
+  // Build days
+  let cells = '';
+  for(let i=0;i<startOffset;i++) cells+=`<div class="cal-day empty"></div>`;
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const day = sessionMap[dateStr];
+    const tss = day?dayTSS(day):0;
+    const isToday = dateStr===t;
+
+    // Color intensity based on TSS — warm terracotta scale
+    let bg = 'var(--bg4)';
+    if(tss>0){
+      const intensity = Math.min(tss/60,1);
+      bg = `rgba(201,99,64,${0.08+intensity*0.55})`;
+    }
+
+    const types = day ? [...new Set(day.sessions.map(s=>s.type))] : [];
+    const dots = types.slice(0,4).map(type=>`<div class="cal-dot" style="background:${TYPE_COLOR[type]||'#4f6480'}"></div>`).join('');
+
+    cells += `
+      <div class="cal-day" style="background:${bg}" onclick="openDayLog('${dateStr}')" title="${dateStr}${tss>0?' · TSS '+tss.toFixed(0):''}">
+        <div class="cal-day-num" style="color:${isToday?'var(--accent)':tss>40?'var(--bright)':'var(--text)'}">${d}</div>
+        ${dots?`<div class="cal-day-dots">${dots}</div>`:''}
+      </div>
+    `;
+  }
+
+  page.innerHTML = `
+    <div class="page-header">
+      <h2>Calendar</h2>
+    </div>
+    <div class="card">
+      <div class="cal-header">
+        <div class="cal-month-nav">
+          <button class="btn btn-ghost btn-sm" onclick="calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar()">←</button>
+          <span style="font-family:var(--head);font-size:16px;font-weight:600;color:var(--bright);min-width:160px;text-align:center">${monthNames[calMonth]} ${calYear}</span>
+          <button class="btn btn-ghost btn-sm" onclick="calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCalendar()">→</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="calYear=new Date().getFullYear();calMonth=new Date().getMonth();renderCalendar()">Today</button>
+      </div>
+      <div class="cal-grid">
+        ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<div class="cal-day-label">${d}</div>`).join('')}
+        ${cells}
+      </div>
+      <div style="margin-top:16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--text2)">Training load:</span>
+        ${[0.1,0.25,0.42,0.60,0.80].map(v=>`<div style="display:inline-flex;align-items:center;gap:4px"><div style="width:14px;height:14px;border-radius:3px;background:rgba(201,99,64,${0.08+v*0.55})"></div></div>`).join('')}
+        <span style="font-size:10px;color:var(--text2)">Low → High</span>
+        <div style="margin-left:8px;display:flex;gap:8px;flex-wrap:wrap">
+          ${Object.entries(TYPE_COLOR).slice(0,5).map(([t,c])=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text2)"><span style="width:8px;height:8px;border-radius:50%;background:${c};display:inline-block"></span>${t}</span>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function openDayLog(date){
+  navigate('log');
+  setTimeout(()=>renderLog(date),50);
+}
+
+// ═══════════════════════════════════════════════════════
+// RACES PAGE
+// ═══════════════════════════════════════════════════════
+let showAddRace = false;
+
+function renderRaces(){
+  const page = document.getElementById('page-races');
+  const races = DB.getRaces().sort((a,b)=>a.date<b.date?1:-1);
+  const t = today();
+  const upcoming = races.filter(r=>r.date>=t).reverse();
+  const past = races.filter(r=>r.date<t);
+
+  page.innerHTML = `
+    <div class="page-header">
+      <h2>Races</h2>
+      <button class="btn btn-primary" onclick="toggleAddRace()">+ Add Race</button>
+    </div>
+
+    <div id="add-race-form" style="display:${showAddRace?'block':'none'}">
+      <div class="inline-form">
+        <h4>Add Race</h4>
+        <div class="form-row form-row-3">
+          <div class="form-group"><label>Regatta Name</label><input id="r-name" placeholder="Henley Royal Regatta"></div>
+          <div class="form-group"><label>Date</label><input type="date" id="r-date" value="${t}"></div>
+          <div class="form-group"><label>Event</label><input id="r-event" placeholder="M4x Final"></div>
+        </div>
+        <div class="form-row form-row-3">
+          <div class="form-group"><label>Category</label><input id="r-cat" placeholder="Senior A"></div>
+          <div class="form-group"><label>Notes</label><input id="r-notes" placeholder="Optional"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="addRace()">Save Race</button>
+          <button class="btn btn-ghost btn-sm" onclick="showAddRace=false;renderRaces()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    ${upcoming.length ? `
+    <h3>Upcoming</h3>
+    ${upcoming.map(r=>{
+      const days = dateDiff(t,r.date);
+      return `
+        <div class="race-card upcoming">
+          <div class="flex-between">
+            <div>
+              <div style="font-family:var(--head);font-size:15px;font-weight:600;color:var(--bright)">${r.name}</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px">${formatDate(r.date)} · ${r.event||'—'} · ${r.category||'—'}</div>
+              ${r.notes?`<div style="font-size:11px;color:var(--text2);margin-top:4px">${r.notes}</div>`:''}
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:24px;font-weight:600;color:var(--accent)">${days}d</div>
+              <div style="font-size:10px;color:var(--text2)">until race</div>
+              <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="deleteRace('${r.id}')">Remove</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('')}
+    ` : `<div class="empty-state" style="padding:30px"><p>No upcoming races. Add one above.</p></div>`}
+
+    ${past.length ? `
+    <h3 style="margin-top:20px">Results</h3>
+    ${past.map(r=>`
+      <div class="race-card past">
+        <div class="flex-between">
+          <div>
+            <div style="font-family:var(--head);font-size:14px;font-weight:600;color:var(--text)">${r.name}</div>
+            <div style="font-size:12px;color:var(--text2)">${formatDate(r.date)} · ${r.event||'—'}</div>
+            ${r.notes?`<div style="font-size:11px;color:var(--text2);margin-top:3px">${r.notes}</div>`:''}
+          </div>
+          <div style="text-align:right">
+            ${r.result?`<div style="font-size:16px;font-weight:600;color:var(--bright)">${r.result}</div>`:''}
+            ${r.placing?`<div style="font-size:12px;color:var(--amber)">${r.placing}</div>`:''}
+            <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="addResult('${r.id}')">Add Result</button>
+          </div>
+        </div>
+      </div>
+    `).join('')}
+    ` : ''}
+  `;
+}
+
+function toggleAddRace(){ showAddRace=!showAddRace; renderRaces(); }
+
+function addRace(){
+  const races = DB.getRaces();
+  races.push({
+    id: Date.now().toString(),
+    name: document.getElementById('r-name')?.value||'',
+    date: document.getElementById('r-date')?.value||today(),
+    event: document.getElementById('r-event')?.value||'',
+    category: document.getElementById('r-cat')?.value||'',
+    notes: document.getElementById('r-notes')?.value||'',
+    result:'', placing:''
+  });
+  DB.saveRaces(races);
+  showAddRace=false;
+  renderRaces();
+}
+
+function deleteRace(id){
+  DB.saveRaces(DB.getRaces().filter(r=>r.id!==id));
+  renderRaces();
+}
+
+function addResult(id){
+  const result = prompt('Enter result (e.g. 6:32.4):');
+  const placing = prompt('Enter placing (e.g. 2nd, Gold):');
+  const races = DB.getRaces();
+  const r = races.find(r=>r.id===id);
+  if(r){ r.result=result||''; r.placing=placing||''; DB.saveRaces(races); renderRaces(); }
+}
+
+// ═══════════════════════════════════════════════════════
+// RECORDS PAGE
+// ═══════════════════════════════════════════════════════
+function renderRecords(){
+  const page = document.getElementById('page-records');
+  const pbs = getPBs();
+  const allSessions = DB.getSessions();
+
+  // For each PB, find the second best (previous)
+  function getPBHistory(pieceType){
+    const pts = [];
+    allSessions.forEach(day=>{
+      day.sessions.forEach(s=>{
+        if(s.pieceType===pieceType){
+          const ss = parseSplit(s.split)||s.splitSecs;
+          if(ss) pts.push({splitSecs:ss,date:day.date,distance:parseFloat(s.distance)||0});
+        }
+      });
+    });
+    if(pieceType==='30 min'||pieceType==='60 min'){
+      return pts.sort((a,b)=>b.distance-a.distance);
+    }
+    return pts.sort((a,b)=>a.splitSecs-b.splitSecs);
+  }
+
+  const splitTypes = ['2k','5k','1k','500m','3x10 min'];
+  const distTypes = ['30 min','60 min'];
+
+  page.innerHTML = `
+    <h2>Records</h2>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Split-Based PBs</h3>
+      <table>
+        <thead><tr><th>Piece</th><th>Current PB</th><th>Date Set</th><th>Previous PB</th><th>Improvement</th></tr></thead>
+        <tbody>
+          ${splitTypes.map(pt=>{
+            const hist = getPBHistory(pt);
+            const best = hist[0];
+            const prev = hist[1];
+            const improvement = best&&prev ? prev.splitSecs-best.splitSecs : null;
+            return `
+              <tr>
+                <td><span class="chip chip-other">${pt}</span></td>
+                <td style="color:var(--bright);font-weight:600;font-size:16px">${best?formatSplit(best.splitSecs):'—'}</td>
+                <td>${best?formatDate(best.date):'—'}</td>
+                <td style="color:var(--text2)">${prev?formatSplit(prev.splitSecs):'—'}</td>
+                <td>${improvement?`<span class="text-green">▲ ${improvement.toFixed(1)}s</span>`:'—'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3>Distance-Based PBs</h3>
+      <table>
+        <thead><tr><th>Piece</th><th>Current PB</th><th>Split Avg</th><th>Date Set</th><th>Previous PB</th></tr></thead>
+        <tbody>
+          ${distTypes.map(pt=>{
+            const hist = getPBHistory(pt);
+            const best = hist[0];
+            const prev = hist[1];
+            const avgSplit = best&&best.distance&&best.splitSecs ? best.splitSecs : null;
+            return `
+              <tr>
+                <td><span class="chip chip-other">${pt}</span></td>
+                <td style="color:var(--bright);font-weight:600;font-size:16px">${best?best.distance+'km':'—'}</td>
+                <td style="color:var(--accent)">${best&&best.splitSecs?formatSplit(best.splitSecs):'—'}</td>
+                <td>${best?formatDate(best.date):'—'}</td>
+                <td style="color:var(--text2)">${prev?prev.distance+'km':'—'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Erg Progression Charts</h3>
+      <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap" id="erg-prog-tabs">
+        ${splitTypes.map((pt,i)=>`<button class="filter-btn ${i===0?'active':''}" onclick="showErgProgTab('${pt}',this)">${pt}</button>`).join('')}
+      </div>
+      <div class="chart-wrap"><canvas id="chart-records-prog"></canvas></div>
+    </div>
+  `;
+
+  setTimeout(()=>renderErgProgressChart('chart-records-prog','2k',DB.getSessions()),0);
+}
+
+function showErgProgTab(pt, btn){
+  document.querySelectorAll('#erg-prog-tabs .filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderErgProgressChart('chart-records-prog',pt,DB.getSessions());
+}
+
+// ═══════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// GUIDE PAGE
+// ═══════════════════════════════════════════════════════
+function renderGuide(){
+  const page = document.getElementById('page-guide');
+  page.innerHTML = `
+    <h2>Guide</h2>
+    <p class="guide-lead">RowLog is a single-user training log for rowers. Everything lives in your browser — no account, no sync, no server. Here's how to get the most out of it.</p>
+
+    <!-- GETTING STARTED -->
+    <div class="guide-section">
+      <h3>Getting Started</h3>
+      <div class="guide-step">
+        <div class="guide-step-num">1</div>
+        <div class="guide-step-body">
+          <strong>Log your first session</strong>
+          <span>Go to <b>Log</b>, pick today's date, select a session type, fill in distance, split, stroke rate and RPE, then hit Save. That's it.</span>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">2</div>
+        <div class="guide-step-body">
+          <strong>Add your races</strong>
+          <span>Go to <b>Races</b> and add upcoming regattas. The countdown will appear on the Dashboard stat bar.</span>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">3</div>
+        <div class="guide-step-body">
+          <strong>Keep logging — the charts come alive</strong>
+          <span>The fitness curve, weekly distance chart and erg progression all need a few weeks of data before they become meaningful.</span>
+        </div>
+      </div>
+      <div class="guide-step">
+        <div class="guide-step-num">4</div>
+        <div class="guide-step-body">
+          <strong>Tag erg sessions with a piece type</strong>
+          <span>When logging an Erg session, select a Piece Type (2k, 5k, etc.) and enter your split. This feeds the PB board and progression charts on the <b>Ergs</b> and <b>Records</b> pages.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- PAGES -->
+    <div class="guide-section">
+      <h3>Pages</h3>
+      <div class="guide-grid">
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <div><b style="color:var(--text)">Dashboard</b> — Fitness curve, weekly distance, erg trend, sleep avg, stat bar and recent PBs.</div>
+        </div>
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <div><b style="color:var(--text)">Log</b> — Daily entry: up to 3 sessions per day + sleep. Use the prev/next arrows to edit past days.</div>
+        </div>
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <div><b style="color:var(--text)">Ergs</b> — PB board, piece progression chart, and a full filterable table of all erg sessions.</div>
+        </div>
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div><b style="color:var(--text)">Calendar</b> — Month heatmap. Darker = higher training load. Click any day to open its log.</div>
+        </div>
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          <div><b style="color:var(--text)">Races</b> — Upcoming regattas with countdowns. Log results after the race.</div>
+        </div>
+        <div class="guide-nav-hint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+          <div><b style="color:var(--text)">Records</b> — Full PB board with previous bests and improvement delta per piece type.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- LOGGING -->
+    <div class="guide-section">
+      <h3>Logging a Session</h3>
+      <div class="guide-grid">
+        <div>
+          <div class="guide-card" style="margin-bottom:12px">
+            <div class="guide-label">Split Format</div>
+            <div class="guide-title">1:52.3</div>
+            <div class="guide-body">Enter splits as <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">M:SS.d</code> — minutes, colon, seconds and tenths. This is auto-converted to total seconds internally for calculations and PB comparisons.</div>
+          </div>
+          <div class="guide-card">
+            <div class="guide-label">S&C Sessions</div>
+            <div class="guide-title">Strength & Conditioning</div>
+            <div class="guide-body">Selecting <b>S&C</b> replaces the rowing fields with an exercise logger (name, sets, reps, weight). S&C sessions count as <b>10 km equivalent</b> for training load calculations.</div>
+          </div>
+        </div>
+        <div class="guide-card">
+          <div class="guide-label">Session Types</div>
+          <div class="guide-chip-row" style="margin-bottom:14px">
+            ${['Race','Water Session','Pieces on Water','Erg UT2','Erg Threshold','Erg Intervals','S&C','Rest','Other'].map(t=>`<span class="chip ${{'Race':'chip-race','Water Session':'chip-water','Pieces on Water':'chip-pieces','Erg UT2':'chip-ut2','Erg Threshold':'chip-threshold','Erg Intervals':'chip-intervals','S&C':'chip-sc','Rest':'chip-rest','Other':'chip-other'}[t]}">${t}</span>`).join('')}
+          </div>
+          <div class="guide-body">
+            <p><b style="color:var(--text)">Erg sessions</b> unlock a Piece Type dropdown (2k, 5k, 1k, 500m, 30 min, 60 min, 3×10 min). Tagging piece type is what powers the PB board and progression charts.</p>
+            <p><b style="color:var(--text)">Rest</b> logs the day but contributes zero to training load — useful to track planned rest days.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- RPE -->
+    <div class="guide-section">
+      <h3>RPE — Rate of Perceived Exertion</h3>
+      <p class="guide-body" style="margin-bottom:12px;max-width:600px">RPE is the backbone of training load. Be honest — it's the only way the fitness curve reflects reality.</p>
+      <div class="guide-rpe-row">
+        ${[
+          {n:'1',label:'Rest',bg:'rgba(140,118,96,0.12)',color:'#5A4A3A'},
+          {n:'2',label:'Very easy',bg:'rgba(46,122,74,0.10)',color:'#1A5830'},
+          {n:'3',label:'Easy',bg:'rgba(46,122,74,0.18)',color:'#1A5830'},
+          {n:'4',label:'Moderate',bg:'rgba(46,122,74,0.28)',color:'#1A5830'},
+          {n:'5',label:'Steady',bg:'rgba(168,96,32,0.12)',color:'#7A4010'},
+          {n:'6',label:'Comf. hard',bg:'rgba(168,96,32,0.22)',color:'#7A4010'},
+          {n:'7',label:'Hard',bg:'rgba(168,96,32,0.35)',color:'#5A2E08'},
+          {n:'8',label:'Very hard',bg:'rgba(184,50,50,0.18)',color:'#8C1C1C'},
+          {n:'9',label:'Max effort',bg:'rgba(184,50,50,0.30)',color:'#8C1C1C'},
+          {n:'10',label:'All out',bg:'rgba(184,50,50,0.45)',color:'#6A0C0C'},
+        ].map(r=>`<div class="guide-rpe-cell" style="background:${r.bg};color:${r.color}"><div style="font-size:14px">${r.n}</div><div style="font-size:9px;font-weight:400;margin-top:2px">${r.label}</div></div>`).join('')}
+      </div>
+      <div class="guide-grid" style="margin-top:12px">
+        <div class="guide-card"><div class="guide-label">UT2 / Easy paddle</div><div class="guide-body">RPE 2–4. Conversational pace. You could go for hours. Builds aerobic base.</div></div>
+        <div class="guide-card"><div class="guide-label">Threshold / Steady state</div><div class="guide-body">RPE 5–7. Sustained effort. Breathing harder, can still speak in short sentences.</div></div>
+        <div class="guide-card"><div class="guide-label">Intervals / Pieces</div><div class="guide-body">RPE 7–9. High intensity work. Uncomfortable. Can only manage short bursts.</div></div>
+        <div class="guide-card"><div class="guide-label">Race / 2k effort</div><div class="guide-body">RPE 9–10. Maximal. Everything you have. Takes days to recover from.</div></div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- FITNESS CURVE -->
+    <div class="guide-section">
+      <h3>The Fitness Curve — CTL, ATL & TSB</h3>
+      <p class="guide-body" style="max-width:680px;margin-bottom:16px">These three numbers come from the Performance Management Chart (PMC) model, originally developed by Dr. Eric Banister and popularised by TrainingPeaks. They let you objectively track fitness, fatigue, and race readiness over time.</p>
+
+      <div class="guide-grid-3" style="margin-bottom:16px">
+        <div class="guide-card guide-card-accent">
+          <div class="guide-label">TSS · Training Stress Score</div>
+          <div class="guide-formula"><span>TSS</span> = Σ (distance × RPE)</div>
+          <div class="guide-body">Calculated per day from all sessions. S&C = 10 km equivalent. This is a proxy — real TSS uses power data, but distance × RPE captures both volume and intensity for rowing without a power meter.</div>
+        </div>
+        <div class="guide-card guide-card-accent">
+          <div class="guide-label">CTL · Chronic Training Load</div>
+          <div class="guide-formula"><span>CTL</span> = 42-day exp. avg of TSS</div>
+          <div class="guide-body">Your <b>fitness</b>. Rises slowly with consistent training over weeks and months. Falls slowly during rest or illness. Think of it as your aerobic base — the ceiling of what you can sustain.</div>
+        </div>
+        <div class="guide-card guide-card-accent">
+          <div class="guide-label">ATL · Acute Training Load</div>
+          <div class="guide-formula"><span>ATL</span> = 7-day exp. avg of TSS</div>
+          <div class="guide-body">Your <b>fatigue</b>. Reacts fast — spikes within days of hard training, drops quickly during taper or rest. Tracks how tired your body is right now.</div>
+        </div>
+      </div>
+
+      <div class="guide-card guide-card-accent" style="margin-bottom:16px">
+        <div class="guide-label">TSB · Training Stress Balance — Your Form</div>
+        <div class="guide-formula"><span>TSB</span> = CTL − ATL</div>
+        <div class="guide-body">The key race-readiness number. When you're training hard, ATL &gt; CTL so TSB goes negative (fatigued). When you taper, ATL drops faster than CTL and TSB climbs back positive (fresh).</div>
+      </div>
+
+      <table class="guide-tsb-table" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+        <tr><td style="color:var(--green)">TSB &gt; +10</td><td>Fresh — possibly detrained. Good for racing, but fitness may be slipping if held too long.</td></tr>
+        <tr><td style="color:var(--green)">TSB 0 to +10</td><td>Optimal race form. Peaked. Use this window for target events.</td></tr>
+        <tr><td style="color:var(--amber)">TSB −10 to 0</td><td>Normal training zone. Slightly fatigued but performing well. Where you spend most of the year.</td></tr>
+        <tr><td style="color:var(--amber)">TSB −10 to −20</td><td>Heavy block training. Expected during high-volume phases. Monitor recovery carefully.</td></tr>
+        <tr><td style="color:var(--red)">TSB &lt; −20</td><td>Overreaching risk. Consider a recovery day or reduced load before digging deeper.</td></tr>
+      </table>
+
+      <div class="guide-card" style="margin-top:12px">
+        <div class="guide-label">How to use it in practice</div>
+        <div class="guide-body">
+          <p>Plan your season around TSB. Build CTL through your training block (TSB negative), then taper 1–2 weeks before your A-race to let TSB rise to +5 to +15. The exact number varies by athlete — track what TSB you felt best racing at and aim for it.</p>
+          <p>The curve only becomes meaningful after several weeks of consistent logging. The more historical data you have, the more accurate the warmup calculation and the more reliable the curve.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- PBs -->
+    <div class="guide-section">
+      <h3>Personal Bests</h3>
+      <div class="guide-grid">
+        <div class="guide-card">
+          <div class="guide-label">How PBs are detected</div>
+          <div class="guide-body">
+            <p>Every time you save an erg session with a Piece Type and a Split, RowLog compares that split to your existing best for that piece. If it's faster, it becomes your new PB automatically.</p>
+            <p>For time-based pieces (30 min, 60 min), the best is the <b>highest distance</b> logged. For distance pieces (2k, 5k etc.) it's the <b>lowest split time</b>.</p>
+          </div>
+        </div>
+        <div class="guide-card">
+          <div class="guide-label">Dashboard PB flag</div>
+          <div class="guide-body">
+            <p>If a PB was set in the last 14 days, a <b>Recent PBs</b> section appears on the Dashboard with the piece type, the split, and the date.</p>
+            <p>The <b>Records</b> page shows your full PB board with the previous best and improvement in seconds, so you can track progression over your entire career.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-divider"></div>
+
+    <!-- DATA -->
+    <div class="guide-section">
+      <h3>Your Data</h3>
+      <div class="guide-card">
+        <div class="guide-label">Where it's stored</div>
+        <div class="guide-body">
+          <p>All data lives in your browser's <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">localStorage</code> under two keys: <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">rowlog_sessions</code> and <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">rowlog_races</code>. Nothing leaves your device.</p>
+          <p>To back up your data, open the browser console and run: <code style="background:var(--bg2);padding:2px 6px;border-radius:3px;color:var(--accent)">JSON.stringify(localStorage.getItem('rowlog_sessions'))</code> and save the output somewhere safe. To restore, paste it back with <code style="background:var(--bg2);padding:2px 6px;border-radius:3px;color:var(--accent)">localStorage.setItem('rowlog_sessions', ...)</code>.</p>
+          <p style="color:var(--amber)">⚠ Clearing browser data or cache will erase your log. Back up regularly.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// CHECK-IN PAGE
+// ═══════════════════════════════════════════════════════
+let ciDate = today();
+
+function getCheckinHistoryHTML(){
+  const checkins = DB.getCheckins().slice(0,10);
+  if(!checkins.length) return '<p style="color:var(--text3);font-size:12px">No check-ins yet.</p>';
+  return checkins.map(ci=>{
+    const score = ci.readinessScore || 50;
+    const light = ci.trafficLight || getTrafficLight(score);
+    const color = light==='green'?'#2E7A4A':light==='amber'?'#A86020':'#B83232';
+    return `<div class="ci-prev-card" style="border-left:3px solid ${color}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:600;color:var(--bright)">${formatDate(ci.date)}</span>
+        <span class="traffic-light traffic-${light}" style="font-size:10px">${light.toUpperCase()} ${score}</span>
+      </div>
+      <div class="ci-breakdown-grid">
+        <span style="color:var(--text2);font-size:11px">Fatigue</span><span style="font-size:11px">${ci.fatigue}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#B83232;width:${ci.fatigue*10}%;height:100%;border-radius:2px"></div></div>
+        <span style="color:var(--text2);font-size:11px">Mood</span><span style="font-size:11px">${ci.mood}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#2E7A4A;width:${ci.mood*10}%;height:100%;border-radius:2px"></div></div>
+        <span style="color:var(--text2);font-size:11px">Soreness</span><span style="font-size:11px">${ci.soreness}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#A86020;width:${ci.soreness*10}%;height:100%;border-radius:2px"></div></div>
+        <span style="color:var(--text2);font-size:11px">Stress</span><span style="font-size:11px">${ci.stress}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#6040A0;width:${ci.stress*10}%;height:100%;border-radius:2px"></div></div>
+      </div>
+      ${ci.hrv?`<div style="font-size:11px;color:var(--text2);margin-top:6px">HRV: <strong>${ci.hrv} ms</strong></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function updateCiSleepHours(){
+  const bed = document.getElementById('ci-bed')?.value;
+  const wake = document.getElementById('ci-wake')?.value;
+  if(bed&&wake){
+    const [bh,bm] = bed.split(':').map(Number);
+    const [wh,wm] = wake.split(':').map(Number);
+    let mins = (wh*60+wm)-(bh*60+bm);
+    if(mins<0) mins+=1440;
+    const hrs = +(mins/60).toFixed(1);
+    const el = document.getElementById('ci-hours');
+    if(el) el.value = hrs;
+  }
+}
+
+function updateCheckinPreview(){
+  const fatigue = parseInt(document.getElementById('ci-fatigue')?.value||5);
+  const mood = parseInt(document.getElementById('ci-mood')?.value||5);
+  const soreness = parseInt(document.getElementById('ci-soreness')?.value||5);
+  const stress = parseInt(document.getElementById('ci-stress')?.value||5);
+  const fitness = buildFitnessData(7);
+  const todayFit = fitness[fitness.length-1]||{tsb:0};
+  const sleepHrs = document.getElementById('ci-hours')?.value || null;
+  const sleepQuality = document.getElementById('ci-sleep-quality')?.value || null;
+  const score = calcReadinessScore({ fatigue, mood, soreness, stress, sleepHrs, sleepQuality }, todayFit.tsb);
+  const light = getTrafficLight(score);
+  const color = light==='green'?'#2E7A4A':light==='amber'?'#A86020':'#B83232';
+  const r = 46, circ = 2*Math.PI*r;
+  const dash = (score/100)*circ;
+  const ring = document.getElementById('ci-ring');
+  if(ring) ring.innerHTML = `
+    <svg viewBox="0 0 100 100" style="transform:rotate(-90deg)">
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--bg2)" stroke-width="8"/>
+      <circle cx="50" cy="50" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+        stroke-dasharray="${dash.toFixed(1)} ${circ.toFixed(1)}" stroke-linecap="round"/>
+    </svg>
+    <div class="readiness-ring-inner">
+      <div style="font-size:22px;font-weight:700;color:${color};line-height:1">${score}</div>
+      <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:1px">readiness</div>
+    </div>`;
+  const tl = document.getElementById('ci-traffic-light');
+  if(tl) tl.className = `traffic-light traffic-${light}`;
+  if(tl) tl.textContent = light.toUpperCase();
+  ['ci-fatigue','ci-mood','ci-soreness','ci-stress'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){ const disp = document.getElementById(id+'-val'); if(disp) disp.textContent = el.value; }
+  });
+}
+
+function saveCheckin(){
+  const fatigue = parseInt(document.getElementById('ci-fatigue').value);
+  const mood = parseInt(document.getElementById('ci-mood').value);
+  const soreness = parseInt(document.getElementById('ci-soreness').value);
+  const stress = parseInt(document.getElementById('ci-stress').value);
+  const hrv = document.getElementById('ci-hrv').value;
+  const bed = document.getElementById('ci-bed')?.value||'';
+  const wake = document.getElementById('ci-wake')?.value||'';
+  const sleepHrs = document.getElementById('ci-hours')?.value||null;
+  const sleepQuality = document.getElementById('ci-sleep-quality')?.value||null;
+
+  // Sleep belongs to the previous night's date (you slept on ciDate-1, woke on ciDate)
+  const sleepDate = dateAdd(ciDate, -1);
+  const existingSleepDay = DB.getDay(sleepDate);
+  const sleepDaySessions = existingSleepDay?.sessions || [];
+  DB.upsertDay({ date:sleepDate, sessions:sleepDaySessions, sleep:{ bedtime:bed, wakeTime:wake, hours:sleepHrs?parseFloat(sleepHrs):null, quality:sleepQuality?parseFloat(sleepQuality):null } });
+
+  const fitness = buildFitnessData(7);
+  const todayFit = fitness[fitness.length-1]||{tsb:0};
+  const score = calcReadinessScore({ fatigue, mood, soreness, stress, sleepHrs, sleepQuality }, todayFit.tsb);
+  const light = getTrafficLight(score);
+  DB.upsertCheckin({ date:ciDate, fatigue, mood, soreness, stress, hrv:hrv||null, readinessScore:score, trafficLight:light });
+  renderCheckin();
+}
+
+function renderCheckin(){
+  const page = document.getElementById('page-checkin');
+  const existing = DB.getCheckin(ciDate);
+  const existingDay = DB.getDay(dateAdd(ciDate, -1)); // sleep belongs to the previous night
+  const existingSleep = existingDay?.sleep || {};
+
+  const sliders = [
+    { id:'fatigue', label:'Fatigue', hint:'1 = fresh, 10 = exhausted', color:'#B83232' },
+    { id:'mood', label:'Mood', hint:'1 = low, 10 = excellent', color:'#2E7A4A' },
+    { id:'soreness', label:'Soreness', hint:'1 = none, 10 = very sore', color:'#A86020' },
+    { id:'stress', label:'Life Stress', hint:'1 = calm, 10 = overwhelmed', color:'#6040A0' }
+  ];
+
+  page.innerHTML = `
+    <div class="page-header">
+      <h2>Morning Check-in</h2>
+      <div class="flex-center gap-8">
+        <button class="btn btn-ghost btn-sm" onclick="ciDate=dateAdd(ciDate,-1);renderCheckin()">← Prev</button>
+        <input type="date" value="${ciDate}" onchange="ciDate=this.value;renderCheckin()" style="width:150px">
+        <button class="btn btn-ghost btn-sm" onclick="ciDate=dateAdd(ciDate,1);renderCheckin()">Next →</button>
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <h3>Last Night's Sleep</h3>
+          <div class="form-row form-row-4" style="margin-top:12px">
+            <div class="form-group">
+              <label>Bedtime</label>
+              <input type="time" id="ci-bed" value="${existingSleep.bedtime||''}" oninput="updateCiSleepHours();updateCheckinPreview()">
+            </div>
+            <div class="form-group">
+              <label>Wake Time</label>
+              <input type="time" id="ci-wake" value="${existingSleep.wakeTime||''}" oninput="updateCiSleepHours();updateCheckinPreview()">
+            </div>
+            <div class="form-group">
+              <label>Hours</label>
+              <input type="number" id="ci-hours" value="${existingSleep.hours||''}" step="0.1" min="0" max="24" readonly style="background:var(--bg3);color:var(--text2)">
+            </div>
+            <div class="form-group">
+              <label>Quality (1–10)</label>
+              <input type="number" id="ci-sleep-quality" value="${existingSleep.quality||''}" min="1" max="10" oninput="updateCheckinPreview()">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>How are you feeling?</h3>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:18px">
+            ${sliders.map(s=>`
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <label style="font-size:12px;font-weight:600;color:var(--bright)">${s.label}</label>
+                <span id="${'ci-'+s.id}-val" style="font-size:12px;font-weight:700;color:${s.color}">${existing?existing[s.id]:5}</span>
+              </div>
+              <input type="range" id="ci-${s.id}" min="1" max="10" value="${existing?existing[s.id]:5}"
+                oninput="updateCheckinPreview()"
+                style="--thumb-color:${s.color};width:100%">
+              <div style="display:flex;justify-content:space-between;margin-top:2px">
+                <span style="font-size:10px;color:var(--text3)">1</span>
+                <span style="font-size:10px;color:var(--text3)">${s.hint}</span>
+                <span style="font-size:10px;color:var(--text3)">10</span>
+              </div>
+            </div>
+            `).join('')}
+          </div>
+          <div style="margin-top:20px">
+            <label style="font-size:12px;font-weight:600;color:var(--bright)">HRV <span style="color:var(--text3);font-weight:400">(optional, ms)</span></label>
+            <input type="number" id="ci-hrv" value="${existing&&existing.hrv?existing.hrv:''}" min="10" max="200" placeholder="e.g. 68" oninput="updateCheckinPreview()" style="margin-top:6px;width:120px">
+          </div>
+          <button class="btn btn-primary" onclick="saveCheckin()" style="margin-top:20px;width:100%">
+            ${existing ? 'Update Check-in' : 'Save Check-in'}
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card" style="text-align:center">
+          <h3>Readiness Score</h3>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0">
+            <div id="ci-ring" class="readiness-ring"></div>
+            <div id="ci-traffic-light" class="traffic-light"></div>
+            <div style="font-size:11px;color:var(--text2);max-width:220px;text-align:center">
+              Score updates live as you adjust sliders. Save to record.
+            </div>
+          </div>
+          <div style="text-align:left;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:8px">Score breakdown</div>
+            <div class="ci-breakdown-grid" style="row-gap:6px">
+              <span style="color:var(--text2);font-size:11px">TSB (Fitness)</span><span style="font-size:11px;color:var(--text2)">30%</span><div></div>
+              <span style="color:var(--text2);font-size:11px">Sleep Hours</span><span style="font-size:11px;color:var(--text2)">25%</span><div></div>
+              <span style="color:var(--text2);font-size:11px">Sleep Quality</span><span style="font-size:11px;color:var(--text2)">20%</span><div></div>
+              <span style="color:var(--text2);font-size:11px">Wellness</span><span style="font-size:11px;color:var(--text2)">25%</span><div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Recent Check-ins</h3>
+          <div id="ci-history">${getCheckinHistoryHTML()}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Init preview
+  setTimeout(updateCheckinPreview, 0);
+}
+
+const PAGES = { dashboard:renderDashboard, log:renderLog, checkin:renderCheckin, ergs:renderErgs, calendar:renderCalendar, races:renderRaces, records:renderRecords, guide:renderGuide };
+
+function navigate(page){
+  // Deactivate all
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+
+  // Activate target
+  const navEl = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if(navEl) navEl.classList.add('active');
+  const pageEl = document.getElementById(`page-${page}`);
+  if(pageEl) pageEl.classList.add('active');
+
+  // Destroy charts
+  Object.keys(charts).forEach(id=>{ if(charts[id]){ charts[id].destroy(); delete charts[id]; } });
+
+  // Render
+  const renderer = PAGES[page]||renderDashboard;
+  renderer();
+
+  window.location.hash = page;
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+// Handle initial hash
+const initPage = (window.location.hash||'').slice(1)||'dashboard';
+navigate(initPage);
+</script>
+</body>
+</html>

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RowLog — Coach View</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    html, body { overflow: auto; height: auto; }
+    .coach-main { max-width: 1100px; margin: 0 auto; padding: 28px 36px; }
+  </style>
+</head>
+<body>
+<div id="app" style="display:block;min-height:100vh">
+  <!-- Coach header -->
+  <div class="coach-header">
+    <div style="font-family:var(--head);font-size:20px;font-weight:800;color:var(--bright)">
+      Row<span style="color:var(--accent)">Log</span>
+    </div>
+    <span class="coach-badge">Coach View — Read Only</span>
+  </div>
+
+  <div class="coach-main" id="coach-content">
+    <div style="display:flex;align-items:center;justify-content:center;padding:80px">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase } from '../js/supabase.js'
+
+  // ── helpers ──────────────────────────────────────────
+  function formatDate(d) {
+    if(!d) return ''
+    const dt = new Date(d+'T12:00:00')
+    return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+  }
+  function formatDateShort(d) {
+    if(!d) return ''
+    const dt = new Date(d+'T12:00:00')
+    return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short'})
+  }
+  function parseSplit(s) {
+    if(!s||!s.toString().trim()) return null
+    const m = s.toString().trim().match(/^(\d+):(\d+\.?\d*)$/)
+    if(!m) return null
+    return parseInt(m[1])*60 + parseFloat(m[2])
+  }
+  function formatSplit(secs) {
+    if(!secs||secs<=0) return '—'
+    const m = Math.floor(secs/60)
+    const s = (secs%60).toFixed(1).padStart(4,'0')
+    return `${m}:${s}`
+  }
+  function dateAdd(d, days) {
+    const dt = new Date(d+'T12:00:00')
+    dt.setDate(dt.getDate()+days)
+    return dt.toISOString().slice(0,10)
+  }
+  function today() { return new Date().toISOString().slice(0,10) }
+  function weekStart(d) {
+    const dt = new Date(d+'T12:00:00')
+    const day = dt.getDay()
+    const diff = (day===0?-6:1-day)
+    dt.setDate(dt.getDate()+diff)
+    return dt.toISOString().slice(0,10)
+  }
+
+  const INTENSITY_FACTOR = {'Race':1.5,'Water Session':0.6,'Pieces on Water':0.8,'Erg UT2':0.4,'Erg Threshold':1.0,'Erg Intervals':1.2,'S&C':0.5,'Rest':0,'Other':0.6}
+  const TYPE_COLOR = {'Race':'#B83232','Water Session':'#2A6EA0','Pieces on Water':'#1A7888','Erg UT2':'#2E7A4A','Erg Threshold':'#A86020','Erg Intervals':'#C96340','S&C':'#6040A0','Rest':'#8C7660','Other':'#607080'}
+
+  function dayTSS(sessions) {
+    return sessions.reduce((sum,s)=>{
+      if(s.type==='Rest') return sum
+      const dist = s.type==='S&C' ? 10 : (parseFloat(s.distance_km)||0)
+      const rpe = parseFloat(s.rpe)||1
+      return sum + dist * rpe * (INTENSITY_FACTOR[s.type]||0.6)
+    },0)
+  }
+
+  function buildFitnessData(sessionRows, days=90) {
+    const sessionMap = {}
+    sessionRows.forEach(s => {
+      if(!sessionMap[s.date]) sessionMap[s.date]=0
+      const dist = s.type==='S&C'?10:(parseFloat(s.distance_km)||0)
+      const rpe = parseFloat(s.rpe)||1
+      sessionMap[s.date] += dist*rpe*(INTENSITY_FACTOR[s.type]||0.6)
+    })
+    const end = today()
+    const displayStart = dateAdd(end,-days)
+    const allDates = Object.keys(sessionMap).sort()
+    const warmupStart = allDates.length ? dateAdd(allDates[0],-42) : dateAdd(displayStart,-42)
+    const result=[], ctlDecay=Math.exp(-1/42), atlDecay=Math.exp(-1/7)
+    let ctl=0,atl=0,cursor=warmupStart
+    while(cursor<=end){
+      const tss=sessionMap[cursor]||0
+      ctl=ctl*ctlDecay+tss*(1-ctlDecay)
+      atl=atl*atlDecay+tss*(1-atlDecay)
+      if(cursor>=displayStart) result.push({date:cursor,tss,ctl:+ctl.toFixed(1),atl:+atl.toFixed(1),tsb:+(ctl-atl).toFixed(1)})
+      cursor=dateAdd(cursor,1)
+    }
+    return result
+  }
+
+  function getWeeklyDistances(sessionRows, weeks=12) {
+    const weekMap={}
+    sessionRows.forEach(s=>{
+      if(s.type==='Rest') return
+      const w=weekStart(s.date)
+      if(!weekMap[w]) weekMap[w]={total:0,types:{}}
+      const dist=parseFloat(s.distance_km)||0
+      weekMap[w].total+=dist
+      weekMap[w].types[s.type]=(weekMap[w].types[s.type]||0)+dist
+    })
+    const result=[]
+    for(let i=weeks-1;i>=0;i--){
+      const w=weekStart(dateAdd(today(),-i*7))
+      result.push({week:w,...(weekMap[w]||{total:0,types:{}})})
+    }
+    return result
+  }
+
+  function getPBs(sessionRows) {
+    const pbs={}
+    sessionRows.forEach(s=>{
+      if(!s.piece_type) return
+      const pt=s.piece_type
+      if(pt==='30 min'||pt==='60 min'){
+        const dist=parseFloat(s.distance_km)||0
+        if(!pbs[pt]||dist>pbs[pt].distance) pbs[pt]={distance:dist,date:s.date}
+      } else {
+        const ss=parseSplit(s.split_text)||s.split_secs
+        if(!ss) return
+        if(!pbs[pt]||ss<pbs[pt].splitSecs) pbs[pt]={splitSecs:ss,date:s.date}
+      }
+    })
+    return pbs
+  }
+
+  function getReadinessTrend(checkins, sessionRows, n=28) {
+    const fitnessData = buildFitnessData(sessionRows, n+10)
+    const result=[]
+    for(let i=n-1;i>=0;i--){
+      const date=dateAdd(today(),-i)
+      const ci=checkins.find(c=>c.date===date)
+      const fit=fitnessData.find(f=>f.date===date)
+      const tsb=fit?fit.tsb:0
+      result.push({date, score:ci?ci.readiness_score:null, tsb})
+    }
+    return result
+  }
+
+  const charts={}
+  function mkChart(id,cfg){
+    if(charts[id]){charts[id].destroy();delete charts[id]}
+    const el=document.getElementById(id)
+    if(!el) return null
+    charts[id]=new Chart(el,cfg)
+    return charts[id]
+  }
+  Chart.defaults.color='#8C7660'
+  Chart.defaults.borderColor='#DDD4C4'
+  Chart.defaults.font.family="'IBM Plex Mono', monospace"
+  Chart.defaults.font.size=11
+
+  // ── main ─────────────────────────────────────────────
+  async function init() {
+    const container = document.getElementById('coach-content')
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+
+    if(!token) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:80px 20px">
+          <p style="font-size:14px;color:var(--text2)">No share token provided. Ask your athlete for their Coach View link.</p>
+        </div>
+      `
+      return
+    }
+
+    try {
+      // Fetch profile by share token via security-definer RPC
+      const { data: profileArr, error: profileErr } = await supabase
+        .rpc('get_profile_by_share_token', { token })
+
+      if(profileErr || !profileArr || !profileArr.length) {
+        container.innerHTML = `<div class="empty-state" style="padding:80px"><p>Athlete not found. The link may be invalid or expired.</p></div>`
+        return
+      }
+      const profile = profileArr[0]
+      const uid = profile.id
+
+      // Fetch sessions, checkins, races
+      const [
+        { data: sessions },
+        { data: checkins },
+        { data: races }
+      ] = await Promise.all([
+        supabase.from('sessions').select('*').eq('user_id', uid).order('date', { ascending: false }),
+        supabase.from('checkins').select('date, readiness_score, traffic_light').eq('user_id', uid).order('date', { ascending: false }),
+        supabase.from('races').select('*').eq('user_id', uid).order('date', { ascending: false })
+      ])
+
+      const sessionRows = sessions || []
+      const checkinRows = checkins || []
+      const raceRows = races || []
+
+      const fitnessData = buildFitnessData(sessionRows, 90)
+      const todayFit = fitnessData[fitnessData.length-1] || {ctl:0,atl:0,tsb:0}
+      const weeklyData = getWeeklyDistances(sessionRows, 12)
+      const readinessTrend = getReadinessTrend(checkinRows, sessionRows, 28)
+      const pbs = getPBs(sessionRows)
+      const recentSessions = sessionRows.slice(0,10)
+      const totalKm = sessionRows.filter(s=>s.type!=='Rest'&&s.type!=='S&C').reduce((s,r)=>s+(parseFloat(r.distance_km)||0),0)
+      const tsbClass = todayFit.tsb>=0 ? 'text-green' : 'text-red'
+
+      document.title = `RowLog — ${profile.username || profile.full_name || 'Athlete'} — Coach View`
+
+      container.innerHTML = `
+        <div style="margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:20px">
+            <div class="profile-avatar" style="width:56px;height:56px;font-size:20px">
+              ${profile.avatar_url ? `<img src="${profile.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">` : (profile.username||'?')[0].toUpperCase()}
+            </div>
+            <div>
+              <div style="font-family:var(--head);font-size:22px;font-weight:800;color:var(--bright)">${profile.full_name || profile.username || 'Athlete'}</div>
+              <div style="font-size:12px;color:var(--text2)">${profile.club||''} ${profile.boat_type?'· '+profile.boat_type:''} ${profile.seat?'· '+profile.seat:''}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-bar" style="margin-bottom:24px">
+          <div class="stat-item">
+            <div class="stat-val ${tsbClass}">${todayFit.tsb>0?'+':''}${todayFit.tsb}</div>
+            <div class="stat-label">Form (TSB)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val">${todayFit.ctl}</div>
+            <div class="stat-label">CTL (Fitness)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val">${todayFit.atl}</div>
+            <div class="stat-label">ATL (Fatigue)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-val">${totalKm.toFixed(0)}<span style="font-size:13px;color:var(--text2)">km</span></div>
+            <div class="stat-label">Total Distance</div>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:16px">
+          <div class="card">
+            <div class="flex-between" style="margin-bottom:10px">
+              <h3 style="margin:0">Fitness / Fatigue / Form (90 days)</h3>
+              <div style="display:flex;gap:10px">
+                <div class="legend-item"><div class="legend-dot" style="background:#C96340"></div>CTL</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#A86020"></div>ATL</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#2E7A4A"></div>TSB</div>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chart-coach-fitness"></canvas></div>
+          </div>
+          <div class="card">
+            <h3>Weekly Distance (12 weeks)</h3>
+            <div class="chart-wrap"><canvas id="chart-coach-weekly"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <h3>Readiness Trend (28 days)</h3>
+          <div class="chart-wrap"><canvas id="chart-coach-readiness"></canvas></div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:16px">
+          <div class="card">
+            <h3>PB Board</h3>
+            <div class="pb-grid">
+              ${['2k','5k','1k','500m','30 min','60 min'].map(pt=>{
+                const pb=pbs[pt]
+                return `
+                  <div class="pb-card ${pb?'has-pb':''}">
+                    <div class="pb-type">${pt}</div>
+                    ${pb
+                      ? `<div class="pb-val">${pb.splitSecs?formatSplit(pb.splitSecs):pb.distance+'km'}</div><div class="pb-date">${formatDate(pb.date)}</div>`
+                      : `<div class="pb-val text-muted">—</div>`}
+                  </div>
+                `
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Recent Sessions (last 10)</h3>
+            ${recentSessions.length ? `
+            <table>
+              <thead><tr><th>Date</th><th>Type</th><th>Dist</th><th>Split</th><th>RPE</th></tr></thead>
+              <tbody>
+                ${recentSessions.map(s=>`
+                  <tr>
+                    <td>${formatDate(s.date)}</td>
+                    <td style="font-size:11px;color:var(--text2)">${s.type}</td>
+                    <td>${s.distance_km?s.distance_km+'km':'—'}</td>
+                    <td style="color:var(--accent);font-weight:500">${s.split_text||'—'}</td>
+                    <td>${s.rpe||'—'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            ` : '<div class="empty-state" style="padding:20px"><p>No sessions logged yet.</p></div>'}
+          </div>
+        </div>
+
+        ${checkinRows.length ? `
+        <div class="card" style="margin-bottom:16px">
+          <h3>Recent Readiness</h3>
+          <table>
+            <thead><tr><th>Date</th><th>Readiness Score</th><th>Traffic Light</th></tr></thead>
+            <tbody>
+              ${checkinRows.slice(0,14).map(ci=>{
+                const light=ci.traffic_light||'amber'
+                return `
+                  <tr>
+                    <td>${formatDate(ci.date)}</td>
+                    <td><strong>${ci.readiness_score||'—'}/100</strong></td>
+                    <td><span class="traffic-light traffic-${light}" style="font-size:10px">${light.toUpperCase()}</span></td>
+                  </tr>
+                `
+              }).join('')}
+            </tbody>
+          </table>
+          <p style="font-size:10px;color:var(--text3);margin-top:10px">Note: Individual wellness scores (fatigue, mood, soreness, stress) are private to the athlete.</p>
+        </div>
+        ` : ''}
+      `
+
+      // Render charts
+      setTimeout(() => {
+        // Fitness chart
+        mkChart('chart-coach-fitness',{
+          type:'line',
+          data:{
+            labels:fitnessData.map(d=>formatDateShort(d.date)),
+            datasets:[
+              {label:'CTL',data:fitnessData.map(d=>d.ctl),borderColor:'#C96340',backgroundColor:'rgba(201,99,64,0.07)',fill:true,tension:0.3,pointRadius:0,borderWidth:2},
+              {label:'ATL',data:fitnessData.map(d=>d.atl),borderColor:'#A86020',backgroundColor:'transparent',tension:0.3,pointRadius:0,borderWidth:1.5},
+              {label:'TSB',data:fitnessData.map(d=>d.tsb),borderColor:'#2E7A4A',backgroundColor:'transparent',tension:0.3,pointRadius:0,borderWidth:1.5}
+            ]
+          },
+          options:{responsive:true,maintainAspectRatio:true,aspectRatio:2,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1}},scales:{x:{grid:{color:'rgba(180,160,140,0.2)'},ticks:{maxTicksLimit:10,maxRotation:0}},y:{grid:{color:'rgba(180,160,140,0.2)'}}},interaction:{mode:'nearest',axis:'x',intersect:false}}
+        })
+
+        // Weekly distance chart
+        const types=['Race','Pieces on Water','Water Session','Erg Intervals','Erg Threshold','Erg UT2','S&C']
+        mkChart('chart-coach-weekly',{
+          type:'bar',
+          data:{
+            labels:weeklyData.map(d=>formatDateShort(d.week)),
+            datasets:types.map(t=>({
+              label:t,
+              data:weeklyData.map(d=>(d.types&&d.types[t])||0),
+              backgroundColor:TYPE_COLOR[t]+'99',
+              borderColor:TYPE_COLOR[t],
+              borderWidth:1,borderRadius:2,stack:'dist'
+            }))
+          },
+          options:{responsive:true,maintainAspectRatio:true,aspectRatio:2,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxRotation:0}},y:{stacked:true,grid:{color:'rgba(180,160,140,0.2)'},title:{display:true,text:'km',color:'#8C7660'}}}}
+        })
+
+        // Readiness trend chart
+        mkChart('chart-coach-readiness',{
+          type:'line',
+          data:{
+            labels:readinessTrend.map(d=>formatDateShort(d.date)),
+            datasets:[{
+              label:'Readiness',
+              data:readinessTrend.map(d=>d.score),
+              borderColor:'rgba(201,99,64,0.5)',
+              backgroundColor:'transparent',
+              pointBackgroundColor:readinessTrend.map(d=>d.score===null?'transparent':d.score>=75?'#2E7A4A':d.score>=50?'#A86020':'#B83232'),
+              pointRadius:readinessTrend.map(d=>d.score!==null?5:0),
+              pointBorderColor:'#FDFAF6',pointBorderWidth:1.5,borderWidth:1.5,tension:0.3,spanGaps:true
+            }]
+          },
+          options:{responsive:true,maintainAspectRatio:true,aspectRatio:2.5,plugins:{legend:{display:false},tooltip:{backgroundColor:'#FDFAF6',borderColor:'#DDD4C4',titleColor:'#2C1F14',bodyColor:'#8C7660',borderWidth:1,callbacks:{label(ctx){return ctx.raw!==null?' Readiness: '+ctx.raw+'/100':' No check-in'}}}},scales:{x:{grid:{color:'rgba(180,160,140,0.2)'},ticks:{maxTicksLimit:8,maxRotation:0}},y:{min:0,max:100,grid:{color:'rgba(180,160,140,0.2)'},ticks:{callback(v){return v+'%'}}}}}
+        })
+      }, 0)
+
+    } catch(err) {
+      container.innerHTML = `<div style="color:var(--red);padding:40px;font-size:13px">Error loading data: ${err.message}</div>`
+    }
+  }
+
+  init()
+</script>
+</body>
+</html>

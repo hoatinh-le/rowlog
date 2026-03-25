@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RowLog — Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    html, body { overflow: auto; height: auto; }
+    #app { display: block; height: auto; }
+  </style>
+</head>
+<body>
+<div id="app" style="display:flex;flex-direction:column;min-height:100vh">
+  <!-- Simple top bar for standalone profile page -->
+  <div style="background:var(--bg2);border-bottom:1px solid var(--border);padding:14px 36px;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-family:var(--head);font-size:18px;font-weight:800;color:var(--bright)">Row<span style="color:var(--accent)">Log</span></div>
+    <div style="display:flex;gap:10px">
+      <a href="app.html" class="btn btn-ghost btn-sm">← Back to App</a>
+      <button class="btn btn-ghost btn-sm" onclick="window._signOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <div style="padding:28px 36px;flex:1">
+    <h2>Your Profile</h2>
+    <div id="profile-content">
+      <div class="loading-overlay" style="position:static;padding:60px;background:transparent">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script type="module">
+  import { checkAuth, signOut } from '../js/auth.js'
+  import { renderProfile } from '../js/social.js'
+  import { showToast } from '../js/app.js'
+
+  window._signOut = signOut
+  window.showToast = showToast
+
+  async function init() {
+    const session = await checkAuth()
+    if (!session) return
+    await renderProfile()
+  }
+
+  init()
+</script>
+</body>
+</html>

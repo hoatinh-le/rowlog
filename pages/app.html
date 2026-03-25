@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RowLog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-logo">
+      <h1>Row<span>Log</span></h1>
+      <div class="sidebar-subtitle">Training Logger</div>
+    </div>
+
+    <!-- Search bar -->
+    <div class="sidebar-search" style="position:relative">
+      <input type="text" id="sidebar-search" placeholder="Search athletes..." oninput="handleSearch(this.value)" autocomplete="off">
+      <div id="search-results" class="search-results" style="display:none"></div>
+    </div>
+
+    <nav>
+      <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-item" data-page="checkin" onclick="navigate('checkin');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        Check-in
+      </a>
+      <a class="nav-item" data-page="log" onclick="navigate('log');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Log
+      </a>
+      <a class="nav-item" data-page="ergs" onclick="navigate('ergs');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Ergs
+      </a>
+      <a class="nav-item" data-page="calendar" onclick="navigate('calendar');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Calendar
+      </a>
+      <a class="nav-item" data-page="races" onclick="navigate('races');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        Races
+      </a>
+      <a class="nav-item" data-page="records" onclick="navigate('records');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+        Records
+      </a>
+      <a class="nav-item" data-page="feed" onclick="navigate('feed');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span class="nav-item-row">Feed</span>
+      </a>
+      <a class="nav-item" data-page="connections" onclick="navigate('connections');return false" href="#">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span class="nav-item-row">Connections</span>
+      </a>
+      <a class="nav-item" data-page="guide" onclick="navigate('guide');return false" href="#" style="margin-top:auto;border-top:1px solid var(--border)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Guide
+      </a>
+    </nav>
+
+    <!-- Bottom user section -->
+    <div class="sidebar-user">
+      <div id="sidebar-avatar" class="profile-avatar" style="width:32px;height:32px;font-size:12px;min-width:32px"></div>
+      <div style="flex:1;min-width:0">
+        <div class="sidebar-user-name" id="sidebar-username"></div>
+        <div class="sidebar-user-club" id="sidebar-club"></div>
+      </div>
+      <button class="btn-icon" onclick="signOut()" title="Sign out">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="page-dashboard" class="page active"></div>
+    <div id="page-checkin" class="page"></div>
+    <div id="page-log" class="page"></div>
+    <div id="page-ergs" class="page"></div>
+    <div id="page-calendar" class="page"></div>
+    <div id="page-races" class="page"></div>
+    <div id="page-records" class="page"></div>
+    <div id="page-feed" class="page"></div>
+    <div id="page-connections" class="page"></div>
+    <div id="page-guide" class="page"></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script type="module" src="../js/app.js"></script>
+</body>
+</html>
