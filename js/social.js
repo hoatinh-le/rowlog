@@ -87,7 +87,8 @@ function formatSplit(secs) {
   return `${m}:${s}`
 }
 
-export async function renderFeed() {
+export async function renderFeed(reset = false) {
+  if(reset) feedPage = 0
   const container = document.getElementById('feed-content')
   if(!container) return
 
@@ -453,10 +454,6 @@ export async function renderProfile() {
         </div>
       </div>
     `
-
-    window.showToast = (msg, type) => {
-      import('./app.js').then(m => m.showToast(msg, type))
-    }
 
     window._saveProfile = async () => {
       const { error } = await supabase.from('profiles').update({

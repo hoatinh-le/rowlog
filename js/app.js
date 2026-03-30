@@ -70,7 +70,12 @@ function dbRowsToLocalFormat(sessionRows, sleepRows) {
       rate: row.stroke_rate != null ? String(row.stroke_rate) : '',
       rpe: row.rpe != null ? String(row.rpe) : '',
       notes: row.notes || '',
-      exercises: []  // exercises fetched separately if needed
+      exercises: (row.exercises || []).map(ex => ({
+        name: ex.name || '',
+        sets: ex.sets != null ? String(ex.sets) : '',
+        reps: ex.reps != null ? String(ex.reps) : '',
+        weight: ex.weight_kg != null ? String(ex.weight_kg) : ''
+      }))
     })
     // Sort sessions within a day by session_number
     dayMap[d].sessions.sort((a, b) => {
@@ -100,7 +105,8 @@ function dbRowsToLocalFormat(sessionRows, sleepRows) {
 function localFormatToDbRows(day, userId) {
   return day.sessions.map((s, i) => {
     const row = {
-        date: day.date,
+      user_id: userId,
+      date: day.date,
       session_number: i + 1,
       type: s.type,
       piece_type: s.pieceType || null,
@@ -124,10 +130,11 @@ function localFormatToDbRows(day, userId) {
 // ═══════════════════════════════════════════════════════
 async function getSessionRows() {
   if (_sessionsCache) return _sessionsCache
+  const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('sessions')
-    .select('*')
-    .eq('user_id', currentUid)
+    .select('*, exercises(*)')
+    .eq('user_id', uid)
     .order('date', { ascending: false })
   if (error) { showToast('Error loading sessions: ' + error.message, 'error'); return [] }
   _sessionsCache = data || []
@@ -136,10 +143,11 @@ async function getSessionRows() {
 
 async function getSleepRows() {
   if (_sleepCache) return _sleepCache
+  const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('sleep_logs')
     .select('*')
-    .eq('user_id', currentUid)
+    .eq('user_id', uid)
     .order('date', { ascending: false })
   if (error) { showToast('Error loading sleep: ' + error.message, 'error'); return [] }
   _sleepCache = data || []
@@ -213,10 +221,11 @@ async function upsertDay(day) {
 
 async function getRaces() {
   if (_racesCache) return _racesCache
+  const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('races')
     .select('*')
-    .eq('user_id', currentUid)
+    .eq('user_id', uid)
     .order('date', { ascending: false })
   if (error) { showToast('Error loading races: ' + error.message, 'error'); return [] }
   _racesCache = data || []
@@ -224,8 +233,10 @@ async function getRaces() {
 }
 
 async function saveRace(race) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id || currentUid
   const row = {
-    user_id: currentUid,
+    user_id: uid,
     name: race.name,
     date: race.date,
     event: race.event || null,
@@ -247,7 +258,9 @@ async function saveRace(race) {
 }
 
 async function deleteRaceById(id) {
-  const { error } = await supabase.from('races').delete().eq('id', id).eq('user_id', currentUid)
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id || currentUid
+  const { error } = await supabase.from('races').delete().eq('id', id).eq('user_id', uid)
   if (error) { showToast('Error deleting race: ' + error.message, 'error'); return false }
   _racesCache = null
   return true
@@ -255,10 +268,11 @@ async function deleteRaceById(id) {
 
 async function getCheckins() {
   if (_checkinsCache) return _checkinsCache
+  const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('checkins')
     .select('*')
-    .eq('user_id', currentUid)
+    .eq('user_id', uid)
     .order('date', { ascending: false })
   if (error) { showToast('Error loading check-ins: ' + error.message, 'error'); return [] }
   _checkinsCache = data || []
@@ -271,8 +285,11 @@ async function getCheckin(date) {
 }
 
 async function upsertCheckin(ci) {
+  const { data: { user } } = await supabase.auth.getUser()
+  const uid = user?.id || currentUid
+  if (!uid) { showToast('Not authenticated', 'error'); return false }
   const row = {
-    user_id: currentUid,
+    user_id: uid,
     date: ci.date,
     fatigue: ci.fatigue,
     mood: ci.mood,
@@ -1077,7 +1094,7 @@ function renderSessionBlock(s, i) {
             ${SESSION_TYPES.map(t=>`<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
           </select>
         </div>
-        ${ERG_TYPES.includes(s.type)?`
+        ${(ERG_TYPES.includes(s.type) || s.type === 'Pieces on Water')?`
         <div class="form-group">
           <label>Piece Type</label>
           <select onchange="logSessions[${i}].pieceType=this.value">
@@ -1475,12 +1492,14 @@ window.deleteRace = async function(id) {
 
 window.addResult = async function(id) {
   const result = prompt('Enter result (e.g. 6:32.4):')
+  if(result === null) return
   const placing = prompt('Enter placing (e.g. 2nd, Gold):')
+  if(placing === null) return
   const races = await getRaces()
   const r = races.find(r=>r.id===id)
   if(r) {
-    r.result_split = result||''
-    r.race_placing = placing||''
+    r.result = result || ''
+    r.placing = placing || ''
     await saveRace(r)
     renderRaces()
     if(placing) import('./social.js').then(m => m.writeFeedEvent('race', { raceName: r.name, placing, date: r.date }))
@@ -1864,7 +1883,7 @@ async function renderFeedPage() {
   const page = document.getElementById('page-feed')
   page.innerHTML = '<h2>Feed</h2><div id="feed-content"></div>'
   const { renderFeed } = await import('./social.js')
-  renderFeed()
+  renderFeed(true)
 }
 
 async function renderConnectionsPage() {
@@ -2062,8 +2081,7 @@ async function init() {
   if(pending > 0) {
     const connItem = document.querySelector('.nav-item[data-page="connections"]')
     if(connItem) {
-      const row = connItem.querySelector('.nav-item-row') || connItem
-      row.insertAdjacentHTML('beforeend', `<span class="notif-badge">${pending}</span>`)
+      connItem.insertAdjacentHTML('beforeend', `<span class="notif-badge">${pending}</span>`)
     }
   }
 

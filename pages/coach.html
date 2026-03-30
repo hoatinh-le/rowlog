@@ -195,15 +195,15 @@
       const profile = profileArr[0]
       const uid = profile.id
 
-      // Fetch sessions, checkins, races
+      // Fetch sessions, checkins, races via security-definer RPCs (bypasses RLS for coach view)
       const [
         { data: sessions },
         { data: checkins },
         { data: races }
       ] = await Promise.all([
-        supabase.from('sessions').select('*').eq('user_id', uid).order('date', { ascending: false }),
-        supabase.from('checkins').select('date, readiness_score, traffic_light').eq('user_id', uid).order('date', { ascending: false }),
-        supabase.from('races').select('*').eq('user_id', uid).order('date', { ascending: false })
+        supabase.rpc('get_sessions_for_coach', { p_token: token }),
+        supabase.rpc('get_checkins_for_coach', { p_token: token }),
+        supabase.rpc('get_races_for_coach', { p_token: token })
       ])
 
       const sessionRows = sessions || []

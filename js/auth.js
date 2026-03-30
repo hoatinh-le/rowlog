@@ -118,6 +118,7 @@ export function initRegisterPage() {
 
   let usernameTimeout = null
   let usernameAvailable = false
+  let usernameChecking = false
 
   // Real-time username uniqueness check (debounced 400ms)
   if (usernameInput) {
@@ -126,6 +127,7 @@ export function initRegisterPage() {
       const val = usernameInput.value.trim().toLowerCase()
       usernameCheck.textContent = ''
       usernameAvailable = false
+      usernameChecking = false
 
       if (val.length < 3) {
         usernameCheck.textContent = 'Username must be at least 3 characters.'
@@ -133,6 +135,7 @@ export function initRegisterPage() {
         return
       }
 
+      usernameChecking = true
       usernameTimeout = setTimeout(async () => {
         usernameCheck.textContent = 'Checking...'
         usernameCheck.className = 'username-check'
@@ -141,6 +144,7 @@ export function initRegisterPage() {
           .select('id')
           .eq('username', val)
           .single()
+        usernameChecking = false
         if (data) {
           usernameCheck.textContent = 'Username taken'
           usernameCheck.className = 'username-check username-taken'
@@ -176,6 +180,11 @@ export function initRegisterPage() {
       errorEl.style.display = 'block'
       return
     }
+    if (usernameChecking) {
+      errorEl.textContent = 'Still checking username availability — please wait a moment.'
+      errorEl.style.display = 'block'
+      return
+    }
     if (!usernameAvailable) {
       errorEl.textContent = 'Please choose an available username.'
       errorEl.style.display = 'block'
@@ -186,21 +195,18 @@ export function initRegisterPage() {
     submitBtn.textContent = 'Creating account...'
 
     try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password })
-      if (authError) throw authError
-
-      const userId = authData.user?.id
-      if (!userId) throw new Error('User creation failed.')
-
-      // Insert profile row
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: userId,
-        username,
-        full_name: fullName || null,
-        club: club || null
+      // Create auth user — pass profile fields as metadata so the
+      // handle_new_user trigger can create the profile row automatically
+      // (avoids RLS issues when session isn't established yet).
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username, full_name: fullName || null, club: club || null }
+        }
       })
-      if (profileError) throw profileError
+      if (authError) throw authError
+      if (!authData.user?.id) throw new Error('User creation failed.')
 
       window.location.href = '/pages/app.html'
     } catch (err) {

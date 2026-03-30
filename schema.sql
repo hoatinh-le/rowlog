@@ -166,6 +166,48 @@ $$;
 grant execute on function get_profile_by_share_token(uuid) to anon, authenticated;
 
 -- ─────────────────────────────────────────────
+-- COACH VIEW DATA RPCs (security definer, accessible to anon via share token)
+-- ─────────────────────────────────────────────
+create or replace function get_sessions_for_coach(p_token uuid)
+returns setof sessions
+language sql
+security definer
+set search_path = public
+as $$
+  select s.* from sessions s
+  join profiles p on p.id = s.user_id
+  where p.share_token = p_token
+  order by s.date desc;
+$$;
+grant execute on function get_sessions_for_coach(uuid) to anon, authenticated;
+
+create or replace function get_checkins_for_coach(p_token uuid)
+returns setof checkins
+language sql
+security definer
+set search_path = public
+as $$
+  select c.* from checkins c
+  join profiles p on p.id = c.user_id
+  where p.share_token = p_token
+  order by c.date desc;
+$$;
+grant execute on function get_checkins_for_coach(uuid) to anon, authenticated;
+
+create or replace function get_races_for_coach(p_token uuid)
+returns setof races
+language sql
+security definer
+set search_path = public
+as $$
+  select r.* from races r
+  join profiles p on p.id = r.user_id
+  where p.share_token = p_token
+  order by r.date desc;
+$$;
+grant execute on function get_races_for_coach(uuid) to anon, authenticated;
+
+-- ─────────────────────────────────────────────
 -- AUTO-CREATE PROFILE ON SIGNUP
 -- Runs as SECURITY DEFINER so it bypasses RLS.
 -- Username/name/club are passed as user metadata during signUp.
