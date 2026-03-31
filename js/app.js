@@ -505,7 +505,8 @@ function getYTDDistance(sessions) {
 function getThisWeekSessions(sessions) {
   const w = weekStart(today())
   const week = sessions.filter(d=>weekStart(d.date)===w)
-  const dist = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>(s3.type==='S&C'||s3.type==='Rest'||ERG_TYPES.includes(s3.type))?s2:s2+(parseFloat(s3.distance)||0), 0), 0)
+  const distWater = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>(s3.type==='S&C'||s3.type==='Rest'||ERG_TYPES.includes(s3.type))?s2:s2+(parseFloat(s3.distance)||0), 0), 0)
+  const distErg = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>ERG_TYPES.includes(s3.type)?s2+(parseFloat(s3.distance)||0):s2, 0), 0)
   const distWeighted = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>{
     if(s3.type==='Rest') return s2
     if(s3.type==='S&C') return s2+10
@@ -513,7 +514,8 @@ function getThisWeekSessions(sessions) {
   }, 0), 0)
   return {
     count: week.reduce((s,d)=>s+d.sessions.filter(s2=>s2.type!=='Rest').length, 0),
-    dist,
+    distWater,
+    distErg,
     distWeighted
   }
 }
@@ -962,7 +964,7 @@ async function renderDashboard() {
         <div class="stat-item">
           <div class="stat-val">${week.count}</div>
           <div class="stat-label">Sessions This Week</div>
-          <div class="stat-sub">${week.distWeighted.toFixed(1)} km weighted · ${week.dist.toFixed(1)} km on water</div>
+          <div class="stat-sub">${week.distWater.toFixed(1)} km water · ${week.distErg.toFixed(1)} km erg</div>
         </div>
         <div class="stat-item">
           <div class="stat-val ${todayFit.tsb>=0?'text-green':'text-red'}">${todayFit.tsb>0?'+':''}${todayFit.tsb}</div>
