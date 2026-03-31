@@ -1093,6 +1093,7 @@ async function renderLog(dateParam) {
 }
 
 function renderLogSessions() {
+  window.logSessions = logSessions  // expose to global scope for inline onchange handlers
   const wrap = document.getElementById('log-sessions')
   if(!wrap) return
   wrap.innerHTML = logSessions.map((s,i)=>renderSessionBlock(s,i)).join('')
