@@ -449,7 +449,7 @@ function getWeeklyData(sessions, weeks=12) {
     if(!weekMap[w]) weekMap[w]={ total:0, types:{} }
     day.sessions.forEach(s => {
       if(s.type==='Rest') return
-      const dist = parseFloat(s.distance)||0
+      const dist = s.type==='S&C' ? 10 : (parseFloat(s.distance)||0)
       weekMap[w].total += dist
       weekMap[w].types[s.type] = (weekMap[w].types[s.type]||0)+dist
     })
