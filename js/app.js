@@ -488,17 +488,33 @@ function getPBs(sessions) {
 
 function getYTDDistance(sessions) {
   const yr = today().slice(0,4)
-  return sessions.filter(d=>d.date.startsWith(yr)).reduce((sum,d) => {
-    return sum+d.sessions.reduce((s2,s) => (s.type==='S&C'||s.type==='Rest')?s2:s2+(parseFloat(s.distance)||0), 0)
-  }, 0)
+  const ytdDays = sessions.filter(d=>d.date.startsWith(yr))
+  const actual = ytdDays.reduce((sum,d) =>
+    sum+d.sessions.reduce((s2,s) => (s.type==='S&C'||s.type==='Rest')?s2:s2+(parseFloat(s.distance)||0), 0)
+  , 0)
+  const weighted = ytdDays.reduce((sum,d) =>
+    sum+d.sessions.reduce((s2,s) => {
+      if(s.type==='Rest') return s2
+      if(s.type==='S&C') return s2+10
+      return s2+(parseFloat(s.distance)||0)
+    }, 0)
+  , 0)
+  return { actual, weighted }
 }
 
 function getThisWeekSessions(sessions) {
   const w = weekStart(today())
   const week = sessions.filter(d=>weekStart(d.date)===w)
+  const dist = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>(s3.type==='S&C'||s3.type==='Rest')?s2:s2+(parseFloat(s3.distance)||0), 0), 0)
+  const distWeighted = week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>{
+    if(s3.type==='Rest') return s2
+    if(s3.type==='S&C') return s2+10
+    return s2+(parseFloat(s3.distance)||0)
+  }, 0), 0)
   return {
     count: week.reduce((s,d)=>s+d.sessions.filter(s2=>s2.type!=='Rest').length, 0),
-    dist: week.reduce((s,d)=>s+d.sessions.reduce((s2,s3)=>(s3.type==='S&C'||s3.type==='Rest')?s2:s2+(parseFloat(s3.distance)||0), 0), 0)
+    dist,
+    distWeighted
   }
 }
 
@@ -939,13 +955,14 @@ async function renderDashboard() {
 
       <div class="stat-bar">
         <div class="stat-item">
-          <div class="stat-val">${ytd.toFixed(0)}<span style="font-size:14px;color:var(--text2)">km</span></div>
+          <div class="stat-val">${ytd.weighted.toFixed(0)}<span style="font-size:14px;color:var(--text2)">km</span></div>
           <div class="stat-label">YTD Distance</div>
+          <div class="stat-sub">${ytd.actual.toFixed(0)} km on water/erg</div>
         </div>
         <div class="stat-item">
           <div class="stat-val">${week.count}</div>
           <div class="stat-label">Sessions This Week</div>
-          <div class="stat-sub">${week.dist.toFixed(1)} km</div>
+          <div class="stat-sub">${week.distWeighted.toFixed(1)} km · ${week.dist.toFixed(1)} km on water</div>
         </div>
         <div class="stat-item">
           <div class="stat-val ${todayFit.tsb>=0?'text-green':'text-red'}">${todayFit.tsb>0?'+':''}${todayFit.tsb}</div>
