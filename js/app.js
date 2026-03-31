@@ -12,6 +12,7 @@ let _sessionsCache = null
 let _racesCache = null
 let _checkinsCache = null
 let _sleepCache = null
+let _exercisesCache = null
 
 // ═══════════════════════════════════════════════════════
 // TOAST NOTIFICATIONS
@@ -54,7 +55,7 @@ export function hideLoading(pageEl) {
 
 // Convert flat DB session rows (+ sleep data merged separately) into the
 // {date, sessions:[], sleep:{}} format the rest of the code expects.
-function dbRowsToLocalFormat(sessionRows, sleepRows) {
+function dbRowsToLocalFormat(sessionRows, sleepRows, exerciseRows = []) {
   const dayMap = {}
 
   for (const row of sessionRows) {
@@ -70,12 +71,14 @@ function dbRowsToLocalFormat(sessionRows, sleepRows) {
       rate: row.stroke_rate != null ? String(row.stroke_rate) : '',
       rpe: row.rpe != null ? String(row.rpe) : '',
       notes: row.notes || '',
-      exercises: (row.exercises || []).map(ex => ({
-        name: ex.name || '',
-        sets: ex.sets != null ? String(ex.sets) : '',
-        reps: ex.reps != null ? String(ex.reps) : '',
-        weight: ex.weight_kg != null ? String(ex.weight_kg) : ''
-      }))
+      exercises: exerciseRows
+        .filter(ex => ex.session_id === row.id)
+        .map(ex => ({
+          name: ex.name || '',
+          sets: ex.sets != null ? String(ex.sets) : '',
+          reps: ex.reps != null ? String(ex.reps) : '',
+          weight: ex.weight_kg != null ? String(ex.weight_kg) : ''
+        }))
     })
     // Sort sessions within a day by session_number
     dayMap[d].sessions.sort((a, b) => {
@@ -133,12 +136,24 @@ async function getSessionRows() {
   const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
   const { data, error } = await supabase
     .from('sessions')
-    .select('*, exercises(*)')
+    .select('*')
     .eq('user_id', uid)
     .order('date', { ascending: false })
   if (error) { showToast('Error loading sessions: ' + error.message, 'error'); return [] }
   _sessionsCache = data || []
   return _sessionsCache
+}
+
+async function getExerciseRows() {
+  if (_exercisesCache) return _exercisesCache
+  const uid = currentUid || (await supabase.auth.getUser()).data.user?.id
+  const { data, error } = await supabase
+    .from('exercises')
+    .select('*')
+    .eq('user_id', uid)
+  if (error) { console.error('Error loading exercises:', error); return [] }
+  _exercisesCache = data || []
+  return _exercisesCache
 }
 
 async function getSleepRows() {
@@ -155,9 +170,12 @@ async function getSleepRows() {
 }
 
 async function getAllSessions() {
-  const sessionRows = await getSessionRows()
-  const sleepRows = await getSleepRows()
-  return dbRowsToLocalFormat(sessionRows, sleepRows)
+  const [sessionRows, sleepRows, exerciseRows] = await Promise.all([
+    getSessionRows(),
+    getSleepRows(),
+    getExerciseRows()
+  ])
+  return dbRowsToLocalFormat(sessionRows, sleepRows, exerciseRows)
 }
 
 async function getDay(date) {
@@ -216,6 +234,7 @@ async function upsertDay(day) {
   // Invalidate caches
   _sessionsCache = null
   _sleepCache = null
+  _exercisesCache = null
   return true
 }
 
