@@ -343,10 +343,11 @@ const TYPE_COLOR = {
   'S&C':'#6040A0','Rest':'#8C7660','Other':'#607080'
 }
 
-const INTENSITY_FACTOR = {
-  'Race':1.5,'Water Session':0.6,'Pieces on Water':0.8,
-  'Erg UT2':0.4,'Erg Threshold':1.0,'Erg Intervals':1.2,
-  'S&C':0.5,'Rest':0,'Other':0.6
+// TSS per km — calibrated to TrainingPeaks scale (S&C uses a fixed value, see dayTSS)
+const TSS_PER_KM = {
+  'Race':12,'Water Session':3.5,'Pieces on Water':5.5,
+  'Erg UT2':3.0,'Erg Threshold':6.5,'Erg Intervals':8.0,
+  'Other':4.0
 }
 
 function chip(type) { return `<span class="chip ${TYPE_CHIP[type]||'chip-other'}">${type}</span>` }
@@ -405,10 +406,14 @@ function dayTSS(day) {
   if(!day||!day.sessions) return 0
   return day.sessions.reduce((sum,s) => {
     if(s.type==='Rest') return sum
-    const dist = s.type==='S&C' ? 10 : (parseFloat(s.distance)||0)
-    const rpe = parseFloat(s.rpe)||1
-    const intensity = INTENSITY_FACTOR[s.type]??0.6
-    return sum + dist * rpe * intensity
+    // RPE modifier: centred at RPE 5 (×1.0); RPE 1 → ×0.68, RPE 10 → ×1.40
+    const rpe = parseFloat(s.rpe) || 5
+    const rpeAdj = 0.6 + (rpe / 10) * 0.8
+    // S&C: fixed ~1hr session base TSS, modified by RPE
+    if(s.type === 'S&C') return sum + 45 * rpeAdj
+    const dist = parseFloat(s.distance) || 0
+    if(dist === 0) return sum
+    return sum + dist * (TSS_PER_KM[s.type] ?? 4.0) * rpeAdj
   }, 0)
 }
 
@@ -1872,7 +1877,7 @@ function renderGuide() {
     <div class="guide-section">
       <h3>The Fitness Curve — CTL, ATL & TSB</h3>
       <div class="guide-grid-3" style="margin-bottom:16px">
-        <div class="guide-card guide-card-accent"><div class="guide-label">TSS · Training Stress Score</div><div class="guide-formula"><span>TSS</span> = Σ (distance × RPE × intensity)</div><div class="guide-body">Calculated per day from all sessions. S&C = 10 km equivalent.</div></div>
+        <div class="guide-card guide-card-accent"><div class="guide-label">TSS · Training Stress Score</div><div class="guide-formula"><span>TSS</span> = distance × type-load × RPE-modifier</div><div class="guide-body">Calibrated to TrainingPeaks scale. RPE 5 = neutral; each point above/below adjusts ±8%. S&C = 45 TSS base.</div></div>
         <div class="guide-card guide-card-accent"><div class="guide-label">CTL · Chronic Training Load</div><div class="guide-formula"><span>CTL</span> = 42-day exp. avg of TSS</div><div class="guide-body">Your <b>fitness</b>. Rises slowly with consistent training over weeks and months.</div></div>
         <div class="guide-card guide-card-accent"><div class="guide-label">ATL · Acute Training Load</div><div class="guide-formula"><span>ATL</span> = 7-day exp. avg of TSS</div><div class="guide-body">Your <b>fatigue</b>. Reacts fast — spikes within days of hard training.</div></div>
       </div>
