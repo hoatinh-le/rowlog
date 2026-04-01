@@ -404,15 +404,26 @@ function weekStart(d) {
 // ═══════════════════════════════════════════════════════
 function dayTSS(day) {
   if(!day||!day.sessions) return 0
+  // Threshold split in seconds/500m — the user's FTP equivalent
+  const thresholdSplit = currentProfile?.threshold_split_secs || null
   return day.sessions.reduce((sum,s) => {
     if(s.type==='Rest') return sum
-    // RPE modifier: centred at RPE 5 (×1.0); RPE 1 → ×0.68, RPE 10 → ×1.40
     const rpe = parseFloat(s.rpe) || 5
     const rpeAdj = 0.6 + (rpe / 10) * 0.8
-    // S&C: fixed ~1hr session base TSS, modified by RPE
-    if(s.type === 'S&C') return sum + 45 * rpeAdj
+    // S&C: fixed ~1hr base, modified by RPE
+    if(s.type==='S&C') return sum + 45 * rpeAdj
     const dist = parseFloat(s.distance) || 0
     if(dist === 0) return sum
+    // --- Accurate split-based TSS (TrainingPeaks rTSS method) ---
+    // Requires user's threshold split set in profile AND split logged on session
+    if(thresholdSplit && s.split_secs && s.split_secs > 0) {
+      // duration: dist_km × 2 pieces-of-500m × split_secs_per_500m / 3600
+      const durationHr = (dist * 2 * s.split_secs) / 3600
+      // IF: threshold_split / session_split (slower pace = lower IF)
+      const IF = thresholdSplit / s.split_secs
+      return sum + durationHr * IF * IF * 100
+    }
+    // --- Fallback: type-based estimate when split not available ---
     return sum + dist * (TSS_PER_KM[s.type] ?? 4.0) * rpeAdj
   }, 0)
 }

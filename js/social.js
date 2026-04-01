@@ -434,6 +434,13 @@ export async function renderProfile() {
               <div class="form-group"><label>Weight (kg)</label><input type="number" id="pf-weight" value="${profile.weight_kg||''}" step="0.1"></div>
               <div class="form-group"><label>Height (cm)</label><input type="number" id="pf-height" value="${profile.height_cm||''}" step="0.5"></div>
             </div>
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label>Threshold Split <span style="font-weight:400;color:var(--text3);text-transform:none">/500m — e.g. 2:00.0</span></label>
+                <input id="pf-threshold" placeholder="2:00.0" value="${profile.threshold_split_secs ? (() => { const m=Math.floor(profile.threshold_split_secs/60); const s=(profile.threshold_split_secs%60).toFixed(1).padStart(4,'0'); return m+':'+s })() : ''}">
+                <div style="font-size:10px;color:var(--text3);margin-top:4px">Your 2km test average split or best sustained threshold pace. Used for accurate TSS calculation.</div>
+              </div>
+            </div>
             <div style="margin-bottom:16px">
               <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;font-size:12px;color:var(--text)">
                 <input type="checkbox" id="pf-public" ${profile.is_public?'checked':''} style="width:auto;margin:0">
@@ -456,6 +463,13 @@ export async function renderProfile() {
     `
 
     window._saveProfile = async () => {
+      // Parse threshold split "m:ss.s" → total seconds
+      const thresholdRaw = document.getElementById('pf-threshold').value.trim()
+      let thresholdSecs = null
+      if (thresholdRaw) {
+        const m = thresholdRaw.match(/^(\d+):(\d+\.?\d*)$/)
+        thresholdSecs = m ? parseInt(m[1]) * 60 + parseFloat(m[2]) : null
+      }
       const { error } = await supabase.from('profiles').update({
         full_name: document.getElementById('pf-name').value || null,
         club: document.getElementById('pf-club').value || null,
@@ -463,6 +477,7 @@ export async function renderProfile() {
         seat: document.getElementById('pf-seat').value || null,
         weight_kg: document.getElementById('pf-weight').value ? parseFloat(document.getElementById('pf-weight').value) : null,
         height_cm: document.getElementById('pf-height').value ? parseFloat(document.getElementById('pf-height').value) : null,
+        threshold_split_secs: thresholdSecs,
         is_public: document.getElementById('pf-public').checked
       }).eq('id', user.id)
       if(error) showToast('Error saving: ' + error.message, 'error')
