@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js'
 import { getCurrentUser } from './auth.js'
-import { showToast } from './app.js'
+import { showToast } from './toast.js'
 
 // ─────────────────────────────────────────────
 // searchUsers — public profiles by username or club
