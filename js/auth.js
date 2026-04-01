@@ -57,13 +57,26 @@ export function initLoginPage() {
   const form = document.getElementById('login-form')
   const errorEl = document.getElementById('login-error')
   const forgotLink = document.getElementById('forgot-link')
+  const passwordInput = document.getElementById('login-password')
+  const toggleBtn = document.getElementById('toggle-password')
 
   if (!form) return
 
+  // Show/hide password toggle
+  if (toggleBtn && passwordInput) {
+    toggleBtn.addEventListener('click', () => {
+      const isHidden = passwordInput.type === 'password'
+      passwordInput.type = isHidden ? 'text' : 'password'
+      toggleBtn.textContent = isHidden ? 'Hide' : 'Show'
+    })
+  }
+
+  let failCount = 0
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
-    const email = document.getElementById('login-email').value.trim()
-    const password = document.getElementById('login-password').value
+    const email = document.getElementById('login-email').value.trim().toLowerCase()
+    const password = passwordInput.value
     const submitBtn = form.querySelector('button[type=submit]')
 
     errorEl.style.display = 'none'
@@ -75,8 +88,25 @@ export function initLoginPage() {
       if (error) throw error
       window.location.href = '/pages/app.html'
     } catch (err) {
-      errorEl.textContent = err.message || 'Invalid email or password.'
+      failCount++
+      let msg = err.message || 'Sign in failed.'
+      // Supabase returns "Invalid login credentials" — give a more helpful hint
+      if (err.message?.toLowerCase().includes('invalid login credentials') ||
+          err.message?.toLowerCase().includes('invalid credentials')) {
+        msg = 'Incorrect email or password. Use "Show" to check your password, or reset it below.'
+      } else if (err.message?.toLowerCase().includes('email not confirmed')) {
+        msg = 'Please confirm your email address first — check your inbox for a verification link.'
+      } else if (err.message?.toLowerCase().includes('network') || err.status === 0) {
+        msg = 'Network error — check your connection and try again.'
+      }
+      errorEl.textContent = msg
       errorEl.style.display = 'block'
+      // After first failure, make the forgot-password link more prominent
+      if (failCount >= 1 && forgotLink) {
+        forgotLink.style.fontWeight = '600'
+        forgotLink.style.color = 'var(--accent)'
+        forgotLink.textContent = 'Reset password →'
+      }
       submitBtn.disabled = false
       submitBtn.textContent = 'Sign In'
     }
@@ -85,21 +115,27 @@ export function initLoginPage() {
   if (forgotLink) {
     forgotLink.addEventListener('click', async (e) => {
       e.preventDefault()
-      const email = document.getElementById('login-email').value.trim()
+      const email = document.getElementById('login-email').value.trim().toLowerCase()
       if (!email) {
         errorEl.textContent = 'Enter your email address first.'
         errorEl.style.display = 'block'
         return
       }
+      forgotLink.textContent = 'Sending...'
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/pages/login.html'
       })
       if (error) {
         errorEl.textContent = error.message
         errorEl.style.display = 'block'
+        forgotLink.textContent = 'Reset password →'
       } else {
         errorEl.style.display = 'none'
-        alert('Password reset email sent. Check your inbox.')
+        errorEl.style.background = 'rgba(46,122,74,0.15)'
+        errorEl.style.color = 'var(--green)'
+        errorEl.textContent = 'Reset email sent — check your inbox (and spam folder).'
+        errorEl.style.display = 'block'
+        forgotLink.textContent = 'Resend reset email'
       }
     })
   }
