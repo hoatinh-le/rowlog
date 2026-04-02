@@ -14,7 +14,6 @@ create table if not exists profiles (
   weight_kg numeric,
   height_cm numeric,
   threshold_split_secs numeric,
-  seed_ctl numeric,
   avatar_url text,
   is_public boolean default false,
   share_token uuid default gen_random_uuid(),
