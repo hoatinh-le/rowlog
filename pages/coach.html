@@ -196,19 +196,27 @@
       const uid = profile.id
 
       // Fetch sessions, checkins, races via security-definer RPCs (bypasses RLS for coach view)
-      const [
-        { data: sessions },
-        { data: checkins },
-        { data: races }
-      ] = await Promise.all([
+      const [sessRes, ciRes, raceRes] = await Promise.all([
         supabase.rpc('get_sessions_for_coach', { p_token: token }),
         supabase.rpc('get_checkins_for_coach', { p_token: token }),
         supabase.rpc('get_races_for_coach', { p_token: token })
       ])
 
-      const sessionRows = sessions || []
-      const checkinRows = checkins || []
-      const raceRows = races || []
+      if(sessRes.error || ciRes.error || raceRes.error) {
+        const err = sessRes.error || ciRes.error || raceRes.error
+        container.innerHTML = `
+          <div style="color:var(--red);padding:40px;font-size:13px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border)">
+            <strong>Coach view data unavailable</strong><br><br>
+            ${err.message}<br><br>
+            <span style="color:var(--text2);font-size:11px">The database functions for coach view may not be set up yet.
+            Run the SQL from schema.sql in your Supabase SQL Editor to create them.</span>
+          </div>`
+        return
+      }
+
+      const sessionRows = sessRes.data || []
+      const checkinRows = ciRes.data || []
+      const raceRows = raceRes.data || []
 
       const fitnessData = buildFitnessData(sessionRows, 90)
       const todayFit = fitnessData[fitnessData.length-1] || {ctl:0,atl:0,tsb:0}
