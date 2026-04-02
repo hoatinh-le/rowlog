@@ -817,8 +817,11 @@ function renderErgProgressChart(canvasId, pieceType, sessions) {
 }
 
 // Get the effective split (secs/500m) for any piece type.
-// For time-based pieces (30 min, 60 min) derive split from distance rowed.
+// Always tries logged split first. For time-based pieces (30/60 min),
+// also falls back to deriving split from logged distance.
 function ergEffectiveSplit(s) {
+  const loggedSplit = parseSplit(s.split) || s.splitSecs || null
+  if(loggedSplit) return loggedSplit
   if(s.pieceType==='30 min') {
     const d = parseFloat(s.distance)
     return d>0 ? (30*60)/(d*2) : null
@@ -827,7 +830,7 @@ function ergEffectiveSplit(s) {
     const d = parseFloat(s.distance)
     return d>0 ? (60*60)/(d*2) : null
   }
-  return parseSplit(s.split)||s.splitSecs||null
+  return null
 }
 
 // Multi-line overlay chart — all piece types on one graph (ergs page)
