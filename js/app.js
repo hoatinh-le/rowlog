@@ -873,7 +873,7 @@ function renderAllErgProgressChart(canvasId, sessions) {
         pointBorderColor: '#FDFAF6',
         pointBorderWidth: 1.5,
         borderWidth: 2,
-        spanGaps: false
+        spanGaps: true
       }
     })
 
