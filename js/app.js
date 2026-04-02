@@ -315,7 +315,7 @@ async function upsertCheckin(ci) {
 // HELPERS
 // ═══════════════════════════════════════════════════════
 const SESSION_TYPES = ['Race','Water Session','Pieces on Water','Erg UT2','Erg Threshold','Erg Intervals','S&C','Rest','Other']
-const PIECE_TYPES = ['2k','5k','500m','1k','30 min','60 min','3x10 min','Other']
+const PIECE_TYPES = ['2k','5k','30 min','60 min','3x10 min','Other']
 const ERG_TYPES = ['Erg UT2','Erg Threshold','Erg Intervals']
 
 const TYPE_CHIP = {
@@ -787,18 +787,18 @@ function renderReadinessTrendChart(canvasId, sessions, checkins) {
   })
 }
 
+// Single-type progression chart — used on dashboard and records page
 function renderErgProgressChart(canvasId, pieceType, sessions) {
   const pts = []
   sessions.forEach(day => {
     day.sessions.forEach(s => {
-      if(s.pieceType===pieceType&&s.split) {
-        const ss = parseSplit(s.split)||s.splitSecs
+      if(s.pieceType===pieceType) {
+        const ss = ergEffectiveSplit(s)
         if(ss) pts.push({ x:day.date, y:ss })
       }
     })
   })
   pts.sort((a,b)=>a.x<b.x?-1:1)
-
   mkChart(canvasId, {
     type:'line',
     data:{
@@ -811,6 +811,93 @@ function renderErgProgressChart(canvasId, pieceType, sessions) {
       scales:{
         x:{ grid:{color:'rgba(180,160,140,0.2)'}, ticks:{maxTicksLimit:8,maxRotation:0} },
         y:{ reverse:true, grid:{color:'rgba(180,160,140,0.2)'}, ticks:{ callback(v){ return formatSplit(v) } } }
+      }
+    }
+  })
+}
+
+// Get the effective split (secs/500m) for any piece type.
+// For time-based pieces (30 min, 60 min) derive split from distance rowed.
+function ergEffectiveSplit(s) {
+  if(s.pieceType==='30 min') {
+    const d = parseFloat(s.distance)
+    return d>0 ? (30*60)/(d*2) : null
+  }
+  if(s.pieceType==='60 min') {
+    const d = parseFloat(s.distance)
+    return d>0 ? (60*60)/(d*2) : null
+  }
+  return parseSplit(s.split)||s.splitSecs||null
+}
+
+// Multi-line overlay chart — all piece types on one graph (ergs page)
+function renderAllErgProgressChart(canvasId, sessions) {
+  const PROG_TYPES = ['2k','5k','3x10 min','30 min','60 min']
+  const STYLES = {
+    '2k':      { color:'#C96340', dash:[] },
+    '5k':      { color:'#2E7A4A', dash:[6,3] },
+    '3x10 min':{ color:'#2A6EA0', dash:[3,3] },
+    '30 min':  { color:'#A86020', dash:[8,4] },
+    '60 min':  { color:'#6040A0', dash:[10,5,2,5] },
+  }
+
+  // Collect data points per type
+  const byType = {}
+  PROG_TYPES.forEach(pt => { byType[pt] = [] })
+  sessions.forEach(day => {
+    day.sessions.forEach(s => {
+      if(!PROG_TYPES.includes(s.pieceType)) return
+      const ss = ergEffectiveSplit(s)
+      if(ss) byType[s.pieceType].push({ x:day.date, y:ss })
+    })
+  })
+
+  // Union of all dates as category labels
+  const allDates = [...new Set(PROG_TYPES.flatMap(pt=>byType[pt].map(p=>p.x)))].sort()
+
+  const datasets = PROG_TYPES
+    .filter(pt => byType[pt].length > 0)
+    .map(pt => {
+      const style = STYLES[pt]
+      const ptMap = {}
+      byType[pt].forEach(p => { ptMap[p.x] = p.y })
+      return {
+        label: pt,
+        data: allDates.map(d => ptMap[d] ?? null),
+        borderColor: style.color,
+        backgroundColor: 'transparent',
+        borderDash: style.dash,
+        tension: 0.2,
+        pointRadius: 5,
+        pointBackgroundColor: style.color,
+        pointBorderColor: '#FDFAF6',
+        pointBorderWidth: 1.5,
+        borderWidth: 2,
+        spanGaps: false
+      }
+    })
+
+  if(!datasets.length) {
+    const el = document.getElementById(canvasId)
+    if(el) el.parentElement.innerHTML = '<div class="empty-state" style="padding:40px"><p>Log erg sessions with piece types to see progression</p></div>'
+    return
+  }
+
+  mkChart(canvasId, {
+    type:'line',
+    data:{ labels:allDates.map(d=>formatDateShort(d)), datasets },
+    options:{
+      responsive:true, maintainAspectRatio:true, aspectRatio:2,
+      plugins:{
+        legend:{ display:true, position:'top', labels:{ usePointStyle:true, pointStyle:'circle', boxWidth:8, padding:16, color:'#8C7660', font:{size:11} } },
+        tooltip:{ backgroundColor:'#FDFAF6', borderColor:'#DDD4C4', titleColor:'#2C1F14', bodyColor:'#8C7660', borderWidth:1,
+          callbacks:{ label(ctx){ return ctx.raw!==null ? ` ${ctx.dataset.label}: ${formatSplit(ctx.raw)}` : null } }
+        }
+      },
+      scales:{
+        x:{ grid:{color:'rgba(180,160,140,0.2)'}, ticks:{maxTicksLimit:8,maxRotation:0} },
+        y:{ reverse:true, grid:{color:'rgba(180,160,140,0.2)'}, ticks:{ callback(v){ return formatSplit(v) } },
+          title:{ display:true, text:'Split /500m', color:'#8C7660', font:{size:10} } }
       }
     }
   })
@@ -1266,7 +1353,7 @@ async function renderErgs() {
         <h3>PB Board</h3>
         ${hasPBs ? `
         <div class="pb-grid">
-          ${PIECE_TYPES.slice(0,6).map(pt => {
+          ${['2k','5k','30 min','60 min','3x10 min'].map(pt => {
             const pb = pbs[pt]
             return `
               <div class="pb-card ${pb?'has-pb':''}">
@@ -1284,12 +1371,7 @@ async function renderErgs() {
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="flex-between" style="margin-bottom:12px">
-          <h3 style="margin:0">Progression</h3>
-          <div class="filter-row" style="margin:0">
-            ${['2k','5k','1k','500m'].map(pt=>`<button class="filter-btn ${ergFilter===pt?'active':''}" onclick="window._ergFilterSet('${pt}')">${pt}</button>`).join('')}
-          </div>
-        </div>
+        <h3>Progression</h3>
         <div class="chart-wrap"><canvas id="chart-erg-prog"></canvas></div>
       </div>
 
@@ -1325,10 +1407,7 @@ async function renderErgs() {
     hideLoading(page)
 
     window._ergFilterSet = (pt) => { ergFilter=pt; renderErgs() }
-    setTimeout(() => {
-      const pt = ergFilter==='All'?'2k':ergFilter
-      renderErgProgressChart('chart-erg-prog', pt, sessions)
-    }, 0)
+    setTimeout(() => renderAllErgProgressChart('chart-erg-prog', sessions), 0)
   } catch(err) {
     hideLoading(page)
     showToast('Error loading ergs: ' + err.message, 'error')
@@ -1572,7 +1651,7 @@ async function renderRecords() {
       return pts.sort((a,b)=>a.splitSecs-b.splitSecs)
     }
 
-    const splitTypes = ['2k','5k','1k','500m','3x10 min']
+    const splitTypes = ['2k','5k','3x10 min']
     const distTypes = ['30 min','60 min']
 
     page.innerHTML = `
