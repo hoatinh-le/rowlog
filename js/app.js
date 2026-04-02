@@ -833,8 +833,9 @@ function ergEffectiveSplit(s) {
   return null
 }
 
-// Multi-line overlay chart — all piece types on one graph (ergs page)
-function renderAllErgProgressChart(canvasId, sessions) {
+// Multi-line overlay chart — all piece types on one graph (ergs page).
+// Pass filterType to isolate a single line when user clicks a filter.
+function renderAllErgProgressChart(canvasId, sessions, filterType='All') {
   const PROG_TYPES = ['2k','5k','3x10 min','30 min','60 min']
   const STYLES = {
     '2k':      { color:'#C96340', dash:[] },
@@ -858,7 +859,11 @@ function renderAllErgProgressChart(canvasId, sessions) {
   // Union of all dates as category labels
   const allDates = [...new Set(PROG_TYPES.flatMap(pt=>byType[pt].map(p=>p.x)))].sort()
 
-  const datasets = PROG_TYPES
+  const activeTypes = (filterType !== 'All' && PROG_TYPES.includes(filterType))
+    ? [filterType]
+    : PROG_TYPES
+
+  const datasets = activeTypes
     .filter(pt => byType[pt].length > 0)
     .map(pt => {
       const style = STYLES[pt]
@@ -1410,7 +1415,7 @@ async function renderErgs() {
     hideLoading(page)
 
     window._ergFilterSet = (pt) => { ergFilter=pt; renderErgs() }
-    setTimeout(() => renderAllErgProgressChart('chart-erg-prog', sessions), 0)
+    setTimeout(() => renderAllErgProgressChart('chart-erg-prog', sessions, ergFilter), 0)
   } catch(err) {
     hideLoading(page)
     showToast('Error loading ergs: ' + err.message, 'error')
