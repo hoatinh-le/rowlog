@@ -440,6 +440,11 @@ export async function renderProfile() {
                 <input id="pf-threshold" placeholder="2:00.0" value="${profile.threshold_split_secs ? (() => { const m=Math.floor(profile.threshold_split_secs/60); const s=(profile.threshold_split_secs%60).toFixed(1).padStart(4,'0'); return m+':'+s })() : ''}">
                 <div style="font-size:10px;color:var(--text3);margin-top:4px">Your 2km test average split or best sustained threshold pace. Used for accurate TSS calculation.</div>
               </div>
+              <div class="form-group">
+                <label>Fitness Baseline (CTL) <span style="font-weight:400;color:var(--text3);text-transform:none">— optional</span></label>
+                <input type="number" id="pf-seed-ctl" placeholder="e.g. 50" min="0" max="200" step="1" value="${profile.seed_ctl||''}">
+                <div style="font-size:10px;color:var(--text3);margin-top:4px">Your estimated CTL before you started logging. Club athletes: 30–60. Competitive: 60–100. Fixes TSB when history is short.</div>
+              </div>
             </div>
             <div style="margin-bottom:16px">
               <label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;font-size:12px;color:var(--text)">
@@ -478,6 +483,7 @@ export async function renderProfile() {
         weight_kg: document.getElementById('pf-weight').value ? parseFloat(document.getElementById('pf-weight').value) : null,
         height_cm: document.getElementById('pf-height').value ? parseFloat(document.getElementById('pf-height').value) : null,
         threshold_split_secs: thresholdSecs,
+        seed_ctl: document.getElementById('pf-seed-ctl').value ? parseFloat(document.getElementById('pf-seed-ctl').value) : null,
         is_public: document.getElementById('pf-public').checked
       }).eq('id', user.id)
       if(error) showToast('Error saving: ' + error.message, 'error')

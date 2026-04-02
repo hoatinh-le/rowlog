@@ -421,18 +421,29 @@ function buildFitnessData(sessions, days=90) {
 
   const end = today()
   const displayStart = dateAdd(end, -days)
+  const seedCTL = parseFloat(currentProfile?.seed_ctl) || 0
 
   const allDates = Object.keys(sessionMap).sort()
-  const warmupStart = allDates.length
-    ? dateAdd(allDates[0], -42)
-    : dateAdd(displayStart, -42)
-
-  const result = []
-  let ctl=0, atl=0
   const ctlDecay = Math.exp(-1/42)
   const atlDecay = Math.exp(-1/7)
 
-  let cursor = warmupStart
+  // If user has set a fitness baseline, start the window from displayStart
+  // with CTL=seed and ATL=seed (steady-state assumption — they've been training
+  // consistently). No warmup decay period needed since the seed already
+  // represents their pre-logging fitness.
+  // Without a seed, warm up from 42 days before first session (CTL starts at 0).
+  let cursor, ctl, atl
+  if(seedCTL > 0) {
+    cursor = displayStart
+    ctl = seedCTL
+    atl = seedCTL
+  } else {
+    cursor = allDates.length ? dateAdd(allDates[0], -42) : dateAdd(displayStart, -42)
+    ctl = 0
+    atl = 0
+  }
+
+  const result = []
   while(cursor <= end) {
     const tss = sessionMap[cursor]||0
     ctl = ctl * ctlDecay + tss * (1 - ctlDecay)
