@@ -597,7 +597,7 @@ function calcReadinessScore(ci, tsb) {
   const sleepHrs = sleepHrsScore(ci.sleepHrs) * 10
   const sleepQual = ci.sleepQuality ? ((parseFloat(ci.sleepQuality)/10)*100) : 50
   const wellness = (
-    ((11 - (parseFloat(ci.fatigue)||5)) / 10 * 100) +
+    ((parseFloat(ci.fatigue)||5) / 10 * 100) +
     ((parseFloat(ci.mood)||5) / 10 * 100) +
     ((11 - (parseFloat(ci.soreness)||5)) / 10 * 100) +
     ((11 - (parseFloat(ci.stress)||5)) / 10 * 100)
@@ -1663,7 +1663,7 @@ async function getCheckinHistoryHTML() {
         <span class="traffic-light traffic-${light}" style="font-size:10px">${light.toUpperCase()} ${score}</span>
       </div>
       <div class="ci-breakdown-grid">
-        <span style="color:var(--text2);font-size:11px">Fatigue</span><span style="font-size:11px">${ci.fatigue}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#B83232;width:${ci.fatigue*10}%;height:100%;border-radius:2px"></div></div>
+        <span style="color:var(--text2);font-size:11px">Fatigue</span><span style="font-size:11px">${ci.fatigue}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#2E7A4A;width:${ci.fatigue*10}%;height:100%;border-radius:2px"></div></div>
         <span style="color:var(--text2);font-size:11px">Mood</span><span style="font-size:11px">${ci.mood}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#2E7A4A;width:${ci.mood*10}%;height:100%;border-radius:2px"></div></div>
         <span style="color:var(--text2);font-size:11px">Soreness</span><span style="font-size:11px">${ci.soreness}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#A86020;width:${ci.soreness*10}%;height:100%;border-radius:2px"></div></div>
         <span style="color:var(--text2);font-size:11px">Stress</span><span style="font-size:11px">${ci.stress}/10</span><div style="background:var(--bg2);border-radius:2px;height:4px;position:relative"><div style="background:#6040A0;width:${ci.stress*10}%;height:100%;border-radius:2px"></div></div>
@@ -1759,7 +1759,7 @@ async function renderCheckin() {
     const historyHTML = await getCheckinHistoryHTML()
 
     const sliders = [
-      { id:'fatigue', label:'Fatigue', hint:'1 = fresh, 10 = exhausted', color:'#B83232' },
+      { id:'fatigue', label:'Fatigue', hint:'1 = exhausted, 10 = fresh', color:'#2E7A4A' },
       { id:'mood', label:'Mood', hint:'1 = low, 10 = excellent', color:'#2E7A4A' },
       { id:'soreness', label:'Soreness', hint:'1 = none, 10 = very sore', color:'#A86020' },
       { id:'stress', label:'Life Stress', hint:'1 = calm, 10 = overwhelmed', color:'#6040A0' }
